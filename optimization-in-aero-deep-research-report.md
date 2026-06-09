@@ -5,15 +5,10 @@
 This review assumes **no specific aircraft type or mission**. It covers solver-based trajectory generation for transport aircraft, fixed-wing UAVs, multirotors, and other airborne vehicles, while also citing a few non-aircraft papers from space and robotics when those papers introduced methods that later became standard in airborne trajectory optimization. The emphasis is on **model-based optimization**, **optimal control**, and **solver-centered formulations**, not machine learning. (sources: turn20view0, turn21search1, turn34search15)
 
 The main engineering conclusion is straightforward: for most realistic aircraft trajectory-generation problems, the default workhorse is **direct transcription**—especially **direct collocation** or **pseudospectral transcription**—followed by a **large sparse nonlinear program** solved by derivative-based NLP solvers such as **IPOPT**, **SNOPT**, or **WORHP**. These methods handle many path constraints, multiphase flight segments, and practical aircraft models much better than classical indirect boundary-value formulations. **Indirect methods** remain important for theory, sensitivity analysis, and benchmark solutions, but they are usually not the first implementation choice for complex constrained aircraft problems. (sources: turn20view0, turn21search0, turn14view2, turn14view1, turn14view10, turn14view11)
-> **Direct Transcription**, 直接离散化，直接转录。把连续时间优化问题转换成有限维度非线性规划(NLP, Nonlinear Programing)
-> **Direct Collocation** 是 Direct Transcription 的一种高级实现，在离散点之间**配点(Collocation Points)**, 并要求动力学在这些配点上也成. 用多项式逼近轨迹.
-> **Pseudospectral Transcription**, 更高级的方法，用高阶全局多项式逼近整个轨迹
-> 
-> $$\dot{x}(t) = f(x(t), u(t), t) $$
-> IPOPT(Interior Point OPTimizer) 开源
-> SNOPT(Sparse Nonlinear OPTimizer) 基于序列二次规划方(Sequential Quadratic Programming, SQP)
-> KNITRO(Artelsy Knitro) 专用于求解非线性优化问题的软件包
-> WORHP（We Optimize Really Huge Problems）
+> 阅读提示：Direct transcription 可以理解成“把连续时间问题离散成有限维优化问题”。原始 OCP 里有连续函数 $x(t),u(t)$；direct transcription 会把它们变成很多时间节点上的变量 $x_k,u_k$，然后交给 NLP solver。
+> Direct collocation 是 direct transcription 的一种常用实现。它不仅在节点上放状态和控制，还用 collocation points / 配点约束动力学，使离散轨迹近似满足 $\dot{x}(t)=f(x(t),u(t),t)$。
+> Pseudospectral transcription 也是 direct transcription 的一种高阶形式，通常用特殊节点和高阶多项式逼近整段轨迹。
+> IPOPT = Interior Point OPTimizer，常用开源 sparse NLP solver；SNOPT = Sparse Nonlinear OPTimizer，基于 SQP / Sequential Quadratic Programming；KNITRO = Artelys Knitro，商业非线性优化 solver；WORHP = We Optimize Really Huge Problems，面向大规模非线性优化。
 
 When the problem contains **logic**—for example, flight-level switches, conflict-resolution choices, passage side of an obstacle, waypoint disjunctions, or phase activation—continuous optimal control is not enough. Then the formulation becomes **mixed-integer** or **hybrid**, and solvers such as **Gurobi** or other MIP/MINLP tools become relevant. In air-traffic conflict resolution and hybrid flight planning, this is not a corner case but a core modeling issue. (sources: turn14view3, turn36search13, turn36search14, turn29view0, turn9search0)
 
@@ -34,14 +29,14 @@ $$
 & \psi\!\big(x(t_0),t_0,x(t_f),t_f,p\big)=0 .
 \end{aligned}
 $$
-> s.t. means such that, 表示满足条件
+> s.t. = subject to，表示“满足以下约束”。在最优控制里，目标函数不是单独最小化的，它必须同时满足动力学、路径约束和边界条件。
 
 Here $L$ is the running cost, $\Phi$ is the endpoint cost, $g$ collects path constraints, and $\psi$ collects boundary/linkage constraints. This is the common backbone behind aircraft climb, cruise, descent, trajectory tracking, conflict-resolution, and obstacle-avoidance formulations. (sources: turn20view0, turn32view0)
 
 The **dynamic model** determines almost everything that follows computationally. At one end are simple **kinematic** or geometry-based models, such as Dubins-like path generators. They are cheap and useful for front-end planning, but they can produce trajectories that are dynamically infeasible for the real aircraft. At the other end are **point-mass** and **6-DoF rigid-body** models, sometimes coupled to algebraic performance relations or atmosphere/wind models. Recent aircraft work still most commonly uses point-mass models for planning, because they keep the optimization manageable while representing thrust, drag, climb, mass burn, bank, and wind effects well enough for many mission-level questions. (sources: turn37view0, turn41view0, turn26view1)
 
-> kinematic or geometry based model? 不对力建模，只关注路径形状
-> point mass model? 建模升力/阻力/推力/重力
+> kinematic / geometry-based model: 不直接建模升力、阻力、推力、重力等力学细节，主要关注路径形状、转弯半径、航向、避障和几何可达性。
+> point-mass model: 把飞机看成一个有质量的质点，显式建模升力、阻力、推力、重力对速度、航迹角、高度和航向的影响。它比纯几何路径更接近“能不能真的飞出来”，但还不是 6-DoF 刚体模型。
 
 A representative aircraft point-mass formulation appears in flight-path optimization papers as
 
@@ -114,14 +109,16 @@ $$
 因此，$\gamma>0$ 表示高度增加，$\gamma<0$ 表示高度降低，$\gamma=0$ 在这个简化模型里对应平飞。
 
 This is already rich enough to encode fuel-time-noise tradeoffs, flight-envelope limitations, terrain or approach-path geometry, and safety constraints. ATM-oriented planning often simplifies further to 3-DoF point-mass models with wind-coupled algebraic equations, latitude/longitude progression, and mass dynamics drawn from aircraft performance models such as BADA. (sources: turn26view1, turn41view2)
-> flight-envelope: 飞行包线 飞行范围包络，指飞机能够安全飞行的所有边界集合
+> flight envelope / 飞行包线：飞机能够安全飞行的状态范围，例如速度上下限、高度范围、最大载荷、最大迎角、最大爬升率等。优化轨迹如果跑出飞行包线，数学上也许有解，但物理上不可飞或不安全。
 
 The objective function depends on the application. Common choices are **fuel burn**, **flight time**, **direct operating cost**, **tracking error**, **control effort**, **climate cost**, **noise metrics**, or weighted combinations of these. For commercial-aircraft 4D planning, multi-phase optimal-control formulations often combine fuel, time, emissions, and operational constraints; for UAS local planning, control smoothness and feasibility are often dominant; for ATM conflict resolution, the problem may even be a feasibility problem first and a cost-minimization problem second. (sources: turn34search1, turn36search8, turn13search3, turn29view0)
-
+> objective function / 目标函数：就是“优化器到底在最小化什么”。不同任务目标不一样：民航航路可能重视燃油和时间，低空无人机可能重视平滑和避障，空管冲突问题可能先要求可行和安全，再谈代价最小。
 
 The decision variables can be split into two classes. **Continuous decisions** include thrust, bank angle, angle of attack, speed profile, climb rate, turn rate, or actuator histories. **Discrete decisions** include mode switches, whether to pass left or right of an obstacle, flight-level changes, whether to activate a phase, or which conflict-resolution maneuver family to choose. When those discrete decisions are important, the clean continuous OCP above becomes a **hybrid optimal-control problem** or a **mixed-integer optimal-control problem**. That modeling step is often more important than the eventual choice of solver. (sources: turn36search14, turn34search3, turn29view0)
+> OCP = Optimal Control Problem，最优控制问题。continuous OCP 指所有主要决策变量都是连续量，例如推力大小、速度曲线、坡度角；hybrid / mixed-integer OCP 则加入离散选择，例如“左绕还是右绕”“换不换高度层”“某个飞行阶段是否激活”。一旦有离散选择，问题会明显更难，因为 solver 需要同时处理连续优化和组合搜索。
 
 Uncertainty can enter through wind, atmospheric forecasts, initial mass, state-estimation error, obstacle location, or tracking error. Deterministic solvers then branch into three common styles: **robust optimization** for worst-case or variability-penalized performance, **stochastic expected-value optimization** for average performance across scenarios, and **chance-constrained optimization** for explicit probabilistic safety requirements. In aircraft planning under wind uncertainty, ensemble weather forecasts have become a standard way to generate scenario-based robust or stochastic formulations. (sources: turn32view0, turn35search0, turn35search3, turn15search4, turn15search7, turn28search7)
+> uncertainty / 不确定性：指优化时不能完全确定的量，例如风场、传感器误差、初始质量、障碍物位置。robust optimization 偏保守，关心最坏情况；stochastic optimization 关心平均表现；chance-constrained optimization 关心“违反安全约束的概率不能超过某个阈值”。三者不是同义词，建模假设和计算成本都不同。
 
 ## Core methods and mathematical ideas
 
@@ -129,9 +126,7 @@ Uncertainty can enter through wind, atmospheric forecasts, initial mass, state-e
 
 Two grand theoretical viewpoints dominate trajectory optimization. The first is **Pontryagin-style optimal control**, which turns the problem into necessary conditions on states, controls, and **costates**—that is, time-varying Lagrange multipliers attached to the dynamics. The second is **Bellman-style dynamic programming**, which solves for the **value function**—the best possible remaining cost from each state—and in principle produces a feedback law directly. These are complementary, not competing, viewpoints. (sources: turn20view0, turn17search11, turn12search17)
 
-> Costate: 协态变量 或 伴随变量, 和状态方程配套的一组“反向传播”的微分方程
-> - 普通约束优化里，乘子告诉你某个约束的边际价值
-> - 最优控制里，costate 告诉你某个状态轨迹约束/动力学约束的边际价值
+> Costate / 协态变量 / 伴随变量：可以理解成“状态变量的影子价格”。普通约束优化里的拉格朗日乘子告诉你某个约束的边际价值；最优控制里的 costate $\lambda(t)$ 则告诉你某个状态 $x(t)$ 在某个时刻对最终目标的边际价值。它和状态方程配套，通常从终端条件反向影响整条轨迹。
 
 For
 
@@ -151,6 +146,8 @@ $$
 H(x,u,\lambda,t)=L(x,u,t)+\lambda^\top f(x,u,t),
 $$
 
+> Hamiltonian 在这里不是普通力学课里的总能量，而是最优控制里的辅助函数。$L(x,u,t)$ 表示当前这一瞬间的直接代价；$\lambda^\top f(x,u,t)$ 表示当前控制通过动力学改变状态后，对未来目标的价值影响。直观上，Hamiltonian 把“现在付出的代价”和“状态变化带来的未来价值”放在同一个式子里比较。
+
 and the familiar necessary conditions
 
 $$
@@ -160,6 +157,7 @@ u^\star(t)=\arg\min_{u\in U} H(x^\star,u,\lambda^\star,t),
 $$
 
 plus endpoint transversality conditions. This is the theoretical basis of **indirect methods** and of shooting-based solvers. It is extremely informative because the costate often reveals the physical “shadow price” of altitude, mass, time, or separation constraints. (sources: turn20view0)
+> endpoint transversality conditions: 终端横截条件，可以理解成最优轨迹在终点必须满足的额外必要条件。它们和起点/终点边界条件一起，使 PMP 方法通常变成 two-point boundary-value problem：一部分条件在起点，一部分条件在终点。
 
 Bellman’s route starts from the **principle of optimality**: if the current state is $x$ at time $t$, then the first small slice of control plus the optimal continuation must itself be optimal. Writing
 
@@ -225,6 +223,7 @@ $$
 > Defect constraint 可以理解成“动力学残差约束”或“离散动力学误差约束”。优化器会选择节点状态 $x_k,x_{k+1}$ 和控制量，但这些节点不能随便连起来；它们必须近似满足连续动力学 $\dot{x}=f(x,u,t)$。如果 $\Delta_k\ne0$，说明相邻两个状态点之间的变化和动力学积分预测不一致；如果强制 $\Delta_k=0$，就表示这段离散轨迹 obey dynamics。这里的 defect 不是“故障”，而是“离散化后留下的动力学误差”。 (sources: turn19view0, turn19view1)
 
 For **Hermite–Simpson collocation**, the same integral is approximated by Simpson quadrature:
+> Hermite-Simpson collocation: 一种比 trapezoidal 更高阶的配点方法。它不只看区间两端 $k$ 和 $k+1$，还引入中点 $k+\frac12$，用 Simpson 积分规则近似这段动力学积分。直观上：trapezoidal 像“用直线连两端”，Hermite-Simpson 像“用一段弯曲的三次多项式连接两端”，所以通常更平滑、更准确。
 
 $$
 x_{k+1}-x_k \approx \frac{h_k}{6}\Big(f_k+4f_{k+\frac12}+f_{k+1}\Big),
@@ -236,27 +235,37 @@ $$
 x_{k+\frac12}\approx \frac12(x_k+x_{k+1})+\frac{h_k}{8}(f_k-f_{k+1}).
 $$
 
+> 这里的 $f_k$ 表示在节点 $k$ 处由动力学方程算出的 $\dot{x}$，$f_{k+1}$ 表示节点 $k+1$ 处的 $\dot{x}$，$f_{k+\frac12}$ 表示中点处的 $\dot{x}$。系数 $1,4,1$ 来自 Simpson quadrature：中点信息权重更大，因为它帮助描述区间内部的弯曲趋势。第二个公式是在估计中点状态 $x_{k+\frac12}$，这样优化器可以同时约束端点和中点的动力学一致性。
+
 This raises the local order of accuracy and usually improves smoothness and solver behavior for many aircraft problems. Kelly’s tutorial remains one of the clearest modern introductions. (sources: turn18view1, turn19view2, turn19view3, turn14view2)
 
 Why do engineers like collocation so much? Because it exposes a **large sparse NLP**. Each node mainly couples only to nearby nodes, so Jacobians and Hessians have exploitable structure. This is exactly the regime where sparse derivative-based NLP solvers are strong. Hargraves and Paris’ 1987 paper helped establish this practical direction, and Betts’ later work consolidated it into the standard aircraft and aerospace workflow. (sources: turn25view0, turn21search0, turn21search1, turn20view0)
+> large sparse NLP: 大规模稀疏非线性规划。large 是因为每个时间节点都有状态和控制变量，节点一多变量就很多；sparse 是因为节点 $k$ 的动力学约束通常只和附近节点 $k,k+1$ 或中点有关，不会和所有节点都耦合。Jacobian 是约束对变量的一阶导数矩阵，Hessian 是目标/拉格朗日函数的二阶导数矩阵。稀疏结构让 IPOPT、SNOPT、WORHP 这类 solver 可以只处理非零块，而不是把整个巨大矩阵当成 dense matrix。
 
 ### Pseudospectral methods
 
 **Pseudospectral methods** are a global form of orthogonal collocation: instead of using many local low-order segments, one approximates the state by high-order polynomials over the whole phase—or over hp-adaptively refined mesh elements—and enforces the dynamics at carefully chosen nodes such as **Legendre–Gauss**, **Legendre–Gauss–Radau**, or **Legendre–Gauss–Lobatto** points. The attraction is rapid convergence for smooth solutions and a deep connection between NLP multipliers and continuous-time costates. (sources: turn22search0, turn23search1, turn23search2, turn14view1)
+> Pseudospectral method: 可以理解成“用少量特殊节点 + 高阶多项式”逼近整段轨迹。local collocation 是把时间切成很多小段，每段用低阶近似；pseudospectral 是在一整段 phase 内用更高阶的全局多项式。Legendre-Gauss / Radau / Lobatto 是几类特殊的配点位置，它们不是随便均匀取点，而是为了让积分和导数近似更准确。
+> hp-adaptive: $h$ 指调整 mesh interval 的长度或数量，$p$ 指调整多项式阶数。hp-adaptive mesh refinement 就是 solver 发现某段误差大时，可以把那段切得更细，或者提高那段多项式阶数。
 
 A good mental model is this: local collocation behaves like a finite-element method, while pseudospectral methods behave more like a high-order spectral approximation. For very smooth flight segments, pseudospectral methods can be remarkably accurate with relatively few nodes. That is why tools such as **GPOPS-II** became so influential in aerospace. GPOPS-II uses **hp-adaptive Gaussian quadrature collocation** and transcribes the OCP to a sparse NLP with mesh refinement. (sources: turn14view1, turn38search3)
+> 这里的 mental model 是：local collocation 更像“很多小块拼起来”，pseudospectral 更像“用一条高阶曲线拟合一整段”。如果轨迹很光滑，高阶曲线很有效；如果轨迹有突然切换或不连续，高阶曲线容易振荡或拟合不好。
 
 The catch is that global polynomial methods are less comfortable with **nonsmooth structure**—for example, sharp switching, bang-bang controls, active-set changes, or singular arcs—unless the phase structure is chosen carefully. GPOPS-II’s own paper explicitly notes that solutions near singular arcs may be inaccurate unless the singular conditions are added to the model. That is a useful warning for aircraft problems with throttle saturation, time-optimal segments, or mode boundaries. (sources: turn14view1)
+> nonsmooth structure: 指轨迹或控制不是平滑变化，而是有切换、饱和、拐点或约束突然变 active。bang-bang control 是控制量在上下限之间跳，比如油门要么最大要么最小。active-set change 是某个约束从“不起作用”变成“正好卡住边界”，例如速度达到最大包线。singular arc 是一种更微妙的最优控制段：简单的 Hamiltonian 最优条件不能直接决定控制值，需要额外条件。全局高阶多项式最怕这些“不光滑”的地方，所以实际建模时常把不同 phase 分开。
 
 ### Convexification, sequential convex programming, and chance constraints
 
 Many trajectory problems are nonconvex because of nonlinear dynamics, obstacle-avoidance geometry, aerodynamic envelopes, and separation constraints. A common modern tactic is **sequential convex programming** or **successive convexification**. If the full problem is written as
+> nonconvex: 非凸问题，直观上就是可行域或目标函数形状可能有多个坑，局部最优不一定是全局最优。飞机轨迹优化很容易 nonconvex：动力学非线性、避障约束、最小转弯半径、飞行包线、飞机间隔约束都会带来非凸性。
+> sequential convex programming / successive convexification: 顺序凸规划。核心思想不是一次性硬解原始非凸问题，而是在当前猜测轨迹附近，把非凸问题线性化/凸化成一个更容易解的凸子问题；解完后更新轨迹，再重复这个过程。
 
 $$
 \min_z J(z)\quad \text{s.t.}\quad c(z)=0,\quad g(z)\le 0,
 $$
 
 then around a reference iterate $z^{(i)}$, one solves a convex subproblem in the step $\Delta z$:
+> 这里 $z$ 是把所有决策变量打包后的大向量，可能包括所有时间节点上的状态、控制、时间、参数等。$c(z)=0$ 表示等式约束，例如动力学 defect constraint；$g(z)\le0$ 表示不等式约束，例如速度上限、高度下限、避障距离等。$z^{(i)}$ 是第 $i$ 次迭代时的当前猜测轨迹，$\Delta z$ 是本轮 solver 准备走的一步。
 
 $$
 \begin{aligned}
@@ -267,8 +276,10 @@ g(z^{(i)})+\nabla g(z^{(i)})\Delta z &\le 0,\\
 $$
 
 possibly with **virtual controls** or **exact penalties** to preserve feasibility. The bound $\rho_i$ is the **trust region**—a solver-imposed step limit meant to keep the linearization credible. The solution is then updated by $z^{(i+1)}=z^{(i)}+\Delta z$. (sources: turn16search0, turn37view0, turn14view7)
+> 上面两个含有 $\nabla c,\nabla g$ 的式子就是一阶线性化：用当前点附近的切线/切平面近似原来的非线性约束。$\|\Delta z\|\le\rho_i$ 是 trust region，意思是“这次不要走太远”。因为线性化只在当前点附近可信，如果一步跨太大，近似就可能完全失真。virtual controls 是临时加入的松弛量，用来避免线性化子问题无解；exact penalties 是对违反约束的行为加很大的惩罚，让 solver 倾向于恢复可行性。
 
 A special case is **lossless convexification**, where a specific nonconvex constraint set can be turned into a convex one *without changing the optimal solution*. This idea was developed most famously in flight-vehicle guidance with nonconvex control-bound or pointing constraints, and it strongly influenced later airborne applications even when exact “losslessness” no longer holds and one switches to sequential convexification instead. (sources: turn16search19, turn16search2)
+> lossless convexification: “无损凸化”。普通凸化通常会改变原问题，只是希望近似得好；lossless convexification 更强，指在某些特殊结构下，可以把非凸约束改写成凸约束，而且最优解不变。它很有吸引力，但不是所有飞机轨迹问题都满足这种特殊结构，所以更常见的是 sequential convexification 这种迭代近似方法。
 
 For uncertainty, a canonical formulation is the **chance constraint**
 
@@ -277,18 +288,23 @@ $$
 $$
 
 where $\xi_k$ represents uncertainty and $\varepsilon_j$ is the allowed risk budget. In practice, these are handled by deterministic reformulations, conservative uncertainty margins, scenario sampling, risk allocation, or chance-constrained MPC/SCP variants. This is attractive because it encodes safety in the language engineers actually use—“keep collision probability below $10^{-3}$”—but it raises both modeling and computational burden. (sources: turn15search7, turn42view0, turn28search7, turn40view1)
+> chance constraint: 概率约束。$g_j(x_k,u_k,\xi_k)\le0$ 是第 $j$ 个安全/性能约束，$\xi_k$ 表示不确定性，例如风、障碍物位置误差、传感器误差。$\mathbb{P}(\cdot)\ge1-\varepsilon_j$ 的意思是：这个约束不要求在所有可能情况下都满足，而是要求满足的概率至少为 $1-\varepsilon_j$。如果 $\varepsilon_j=10^{-3}$，就是允许最多约 $0.1\%$ 的违反概率。难点是概率分布、相关性和极端情况都要建模，否则这个约束看起来严谨，实际可能过于保守或不够安全。
 
 A useful special airborne case is the **minimum-snap polynomial** formulation for differentially flat multirotors. If a flat output $p(t)$ is represented by piecewise polynomials $p_i(t)$, one solves a convex QP such as
+> minimum-snap: snap 是位置对时间的四阶导数，也就是 jerk 的导数。对 quadrotor 来说，轨迹太“抖”会导致姿态和电机指令剧烈变化，所以常最小化 snap，让轨迹更平滑。differentially flat 表示系统的状态和控制可以由少数 flat outputs 及其导数表示；对多旋翼，位置和 yaw 常可作为 flat outputs。这也是为什么 minimum-snap 对 quadrotor 很漂亮，但不一定能直接迁移到普通固定翼飞机。
 
 $$
 \min_a \sum_i \int_{t_i}^{t_{i+1}}\left\|\frac{d^4 p_i(t)}{dt^4}\right\|^2 dt
 $$
 
 subject to waypoint, corridor, continuity, and derivative-bound constraints. For quadrotors this is elegant, fast, and influential—but it is also a specialized modeling trick, not a universal aircraft method. (sources: turn43search6, turn43search0)
+> QP 是 quadratic programming，二次规划。这里目标函数是多项式系数 $a$ 的二次函数，约束通常是线性的，例如经过某些 waypoint、保持多项式段之间连续、速度/加速度不超过上限。因此它比一般非线性 OCP 更容易快速求解。
 
 ## Solver-centered modeling patterns in aircraft trajectory generation
 
 The modeling-to-solver pipeline in current aircraft trajectory work is usually less about “finding the perfect algorithm” than about **matching model structure to solver structure**. Smooth multi-phase OCPs with many continuous variables are typically sent to sparse NLP solvers; binary logic is isolated into MIP or MINLP layers; and repeated receding-horizon problems are condensed into QP/SOCP/NMPC forms that can be solved in milliseconds to seconds depending on horizon and model size. Recent aircraft and UAV papers follow exactly this pattern. (sources: turn34search1, turn36search14, turn37view0, turn40view0, turn35search0)
+> 这一节的核心不是再介绍一个新算法，而是讲“问题长什么样，就该交给哪类 solver”。如果变量连续、动力学光滑、约束很多，通常是 sparse NLP；如果有 yes/no、左/右绕行、是否换高度层这种离散选择，就需要 MIP/MINLP；如果要实时滚动重规划，就常把问题改写成 QP/SOCP/NMPC 这类能快速重复求解的形式。
+> 缩写提示：NLP = nonlinear programming；QP = quadratic programming；SOCP = second-order cone programming；MIP = mixed-integer programming；MINLP = mixed-integer nonlinear programming；NMPC = nonlinear model predictive control。
 
 ```mermaid
 flowchart TD
@@ -305,8 +321,12 @@ flowchart TD
 ```
 
 In practice, modern groups often combine **front-end geometry** with **back-end optimal control**. A safe corridor or rough waypoint route is first generated by a simple planner; then a continuous optimization stage smooths it into a dynamically feasible trajectory. Fixed-wing UAV work using **safe flight corridors plus SCP** is a good current example. Another current pattern is **collocation plus successive linear programming**, where the sparse collocation structure is retained but the nonlinear solve is broken into a sequence of LPs or QPs for speed and robustness. (sources: turn14view7, turn37view0)
+> front-end geometry / back-end optimal control: 前端几何规划先给一条“大概安全”的路径，比如 waypoint、A*、RRT、安全走廊；后端最优控制再把这条粗路径变成满足动力学、速度、爬升率、转弯半径等约束的可飞轨迹。这样做的原因是：直接在完整动力学里同时搜索路径和控制太难，先几何后动力学可以把问题拆开。
+> safe corridor: 安全走廊，可以理解成一串允许飞行的空间区域。后端优化不必直接处理复杂障碍物几何，只要保证轨迹待在这些 corridor 里。
+> Monte Carlo checks: 蒙特卡洛验证。把风、初始误差、传感器误差等随机抽样很多次，反复仿真，看轨迹在不确定情况下是否仍然安全。
 
 The table below summarizes the main method families from a solver-centric viewpoint.
+> 下面这张表建议按三列来读：第一看“Continuous vs. discrete decisions”，判断问题有没有离散逻辑；第二看“Typical airborne model”，判断模型复杂度；第三看“Good solver/tool stack”，对应到可用的软件工具。不要把表理解成严格分类，真实工程经常会混合使用，比如 front-end 用几何/MIP，back-end 用 collocation/NLP，online tracking 再用 MPC。
 
 | Method family | Continuous vs. discrete decisions | Typical airborne model | Main strengths | Main limitations | Good solver/tool stack | Key source(s) |
 |---|---|---|---|---|---|---|
@@ -322,6 +342,7 @@ The table below summarizes the main method families from a solver-centric viewpo
 | **Chance-constrained OCP / MPC** | Continuous, sometimes plus discrete risk allocation | Wind uncertainty, obstacle uncertainty, collision-probability limits | Encodes risk directly; better safety interpretation | Distribution assumptions, conservatism, extra computation | Scenario-based MPC/SCP, deterministic reformulations, sampling-based planners | (sources: turn15search7, turn42view0, turn28search7, turn40view1) |
 
 A second practical question is simple but important: **which solver should I actually use?** The short answer is “match the algebraic form.” Derivative-based sparse NLP solvers such as IPOPT, SNOPT, and WORHP remain the standard choices for smooth direct-transcription problems; conic or QP solvers such as MOSEK, ECOS, OSQP, HPIPM, and qpOASES are natural when the subproblem is convexified into LP/QP/SOCP form; and Gurobi is a strong default when binary decisions are unavoidable. Modeling/AD frameworks such as CasADi, ACADO, FALCON.m, ICLOCS2, and GPOPS-II matter almost as much as the solver itself because they determine derivative quality, sparsity exploitation, and ease of mesh refinement. (sources: turn14view9, turn14view10, turn14view11, turn9search1, turn8search7, turn9search2, turn39search5, turn39search12, turn9search0, turn8search2, turn11search11, turn38search2, turn38search4, turn14view1)
+> “match the algebraic form” 的意思是：先看你最终写出来的数学问题是哪种形式，再选 solver。不要先迷信某个 solver。光滑非线性 + 稀疏约束适合 IPOPT/SNOPT/WORHP；凸二次或锥约束适合 OSQP/MOSEK/ECOS/HPIPM；有整数变量适合 Gurobi；需要自动微分、生成雅可比和 Hessian、做 mesh refinement 时，CasADi/GPOPS-II/ICLOCS2 这类建模框架也很关键。
 
 | Problem type | Recommended solver stack | Why this is usually a good fit | Key source(s) |
 |---|---|---|---|
@@ -334,27 +355,31 @@ A second practical question is simple but important: **which solver should I act
 | Embedded repeated NMPC solves | **FORCESPRO**, **acados** | Designed for repeated real-time solves and code generation | (sources: turn39search2, turn39search3) |
 
 One practical recommendation deserves to be stated plainly: **scaling and derivatives are not housekeeping details; they are often the difference between success and failure**. Solver documentation and modern OCP software consistently emphasize analytic derivatives, automatic differentiation, and careful structure exploitation. (sources: turn14view11, turn8search2, turn38search2)
+> scaling: 变量尺度归一化。例如高度可能是 $10^4$ 米，角度可能是 $10^{-1}$ 弧度，燃油流量又是另一个量级；如果直接交给 solver，数值条件会很差。derivatives: solver 需要目标函数和约束的一阶/二阶导数。用 automatic differentiation 或解析导数通常比有限差分更稳定。很多“solver 不收敛”不是算法不行，而是 scaling、初值、导数质量或稀疏结构处理不好。
 
 ## Seminal papers, current directions, and how the field developed
 
 The broad development arc is from general optimal-control theory, to multiple shooting and collocation, to sparse-NLP software, and then to modern real-time convexification, MPC, and uncertainty-aware planning. Bellman’s dynamic programming and Pontryagin’s maximum principle set the theory; Bock, Hargraves, and Betts made numerical trajectory optimization practical; pseudospectral methods pushed accuracy and multiplier recovery; mixed-integer aviation papers handled logic and conflict resolution; and current work emphasizes robust weather-aware planning, real-time convexification, and chance-constrained safety. (sources: turn17search11, turn17search2, turn24view0, turn25view0, turn21search0, turn23search1, turn14view1, turn14view3, turn36search14, turn35search0, turn37view0, turn42view0)
+> 这段历史线可以按“理论 → 数值离散 → 工程软件 → 实时/不确定性”来理解：Bellman/Pontryagin 给理论，shooting/collocation 把问题变成可算的数值问题，sparse NLP 和 pseudospectral 工具让大规模航空问题可解，后来的 SCP/MPC/chance constraints 则面向在线重规划和不确定环境。
 
 ```mermaid
 timeline
     title Development of solver-based trajectory optimization relevant to aircraft and airborne systems
-    1950s : Bellman dynamic programming and the principle of optimality
-    1956-1962 : Pontryagin maximum principle and adjoint-based optimal control
-    1984 : Bock and Plitt establish direct multiple shooting
-    1987 : Hargraves and Paris popularize direct collocation plus NLP
-    1998 : Betts consolidates trajectory-optimization practice in a seminal survey
-    2001-2014 : Pseudospectral methods mature through costate mapping, unified frameworks, and GPOPS-II
-    2002 : Richards and How; Pallottino et al. bring mixed-integer optimization into aircraft conflict and planning
-    2011-2013 : Blackmore chance constraints, Mellinger minimum-snap, Bonami hybrid aircraft OCP, Açıkmeşe convexification
-    2016-2020 : Successive convexification and chance-constrained SCP become mainstream in trajectory planning
-    2023-2025 : Robust weather/climate planning, collocation plus SLP, safe-flight-corridor SCP, and real-time fixed-wing NMPC
+    1950s : Bellman DP
+    1956-1962 : Pontryagin PMP
+    1984 : Direct multiple shooting
+    1987 : Direct collocation plus NLP
+    1998 : Betts trajectory survey
+    2001-2014 : Pseudospectral methods mature
+    2002 : Mixed-integer aircraft conflict planning
+    2011-2013 : Chance constraints and convexification
+    2016-2020 : SCvx and chance-constrained SCP
+    2023-2025 : Robust weather and real-time NMPC
 ```
+> Timeline 阅读提示：图里故意缩短了文字，避免 Mermaid 渲染时框内文字被截断。完整含义是：1950s 的 Bellman DP 和 1956-1962 的 Pontryagin PMP 奠定理论；1980s-1990s 的 shooting/collocation/NLP 让轨迹优化变成工程可算问题；2000s 的 pseudospectral 和 mixed-integer 方法处理高精度连续轨迹与离散逻辑；2010s 之后的 chance constraints、convexification、SCP、NMPC 则主要服务于不确定性和实时规划。
 
 In the tables below, the final column preserves the source IDs from the original generated report.
+> 后面两张 paper 表不是要求一次读完。建议先抓主线：Betts/Kelly/GPOPS-II 负责 direct/collocation/pseudospectral 基础；Richards/Pallottino/Bonami/Cafieri 负责 mixed-integer 和 conflict logic；Mao/Lew/Lu/Sun 负责 convexification/SCP 这条现代实时规划路线。
 
 | Foundational paper | Why it matters | Source IDs |
 |---|---|---|
@@ -370,6 +395,8 @@ In the tables below, the final column preserves the source IDs from the original
 | **Bonami et al. (2013), “Multiphase Mixed-Integer Optimal Control Approach to Aircraft Trajectory Optimization”** | Clear formulation of aircraft trajectory generation as a hybrid problem with discrete and continuous decisions. | (sources: turn36search2, turn36search14) |
 | **Patterson & Rao (2014), “GPOPS-II”** | The most widely cited hp-adaptive pseudospectral software reference in aerospace OCP. | (sources: turn14view1) |
 
+> Foundational paper 表的阅读方式：如果你现在主要想理解算法脉络，不需要逐篇精读。先把它分成四组：Bock/Hargraves/Betts 对应 direct shooting/collocation 的工程化；Fahroo/Garg/Patterson 对应 pseudospectral 和 GPOPS-II；Richards/Pallottino/Bonami 对应 mixed-integer/hybrid logic；Blackmore/Mellinger 分别对应 chance constraint 和 minimum-snap 这两个后来很常用的特殊方向。当前最建议优先读 Betts survey 或 Kelly tutorial，而不是直接读每篇原始论文。
+
 | Recent representative paper | Why it matters now | Source IDs |
 |---|---|---|
 | **Eren et al. (2017), “Model Predictive Control in Aerospace Systems: Current State and Opportunities”** | Broad review of MPC in aerospace; useful orientation before diving into aircraft-specific MPC designs. | (sources: turn15search2, turn15search6) |
@@ -384,10 +411,21 @@ In the tables below, the final column preserves the source IDs from the original
 | **Sun et al. (2025), “Safe flight corridor constrained sequential convex programming for efficient trajectory generation of fixed-wing UAVs”** | Representative of the current “front-end corridor + back-end SCP” design pattern. | (sources: turn10search2, turn14view7) |
 | **Cafieri et al. (2023), “Mixed-integer nonlinear and continuous optimization formulations for aircraft conflict avoidance via heading and speed deviations”** | Good modern example of combining continuous and discrete optimization ideas for ATM conflict problems. | (sources: turn29view0) |
 
+> Recent paper 表可以按应用场景读：如果关心 onboard guidance / tracking，看 Eren、Mammarella、Reinhardt；如果关心天气和 4D 航路规划，看 González-Arribas、Simorgh；如果关心实时非凸轨迹优化，看 Mao、Lew、Lu、Sun；如果关心空管冲突和离散决策，看 Cafieri。这里的“recent representative”不是说这些论文都是必读，而是用它们代表最近几年常见的工程模式。
+
 A useful comparative reading path for students is this. Read **Betts (1998)** to understand why direct methods took over; then read **Kelly (2017)** for an implementable, friendly account of collocation; follow with **Garg et al. (2010)** and **GPOPS-II** for pseudospectral methods; then compare **Pallottino/Richards/Bonami/Cafieri** for mixed-integer logic; and finally compare **Mao/Lew/Lu/Sun** for current convexification-based real-time planning. That sequence mirrors the historical move from theory-first formulations to solver-first engineering. (sources: turn21search0, turn14view2, turn23search1, turn14view1, turn14view3, turn36search13, turn36search14, turn29view0, turn16search0, turn42view0, turn37view0, turn14view7)
+> 推荐阅读顺序换成更口语的版本：第一步看 direct methods 为什么实用；第二步看 collocation 怎么把 OCP 变成 NLP；第三步看 pseudospectral 为什么在 smooth aerospace OCP 里很强；第四步看 mixed-integer 为什么能处理“左/右绕行、换不换高度层”这种逻辑；第五步看 SCP/MPC 为什么适合实时重规划。
 
 ## Open questions and limitations
 
 This review intentionally excluded **machine learning** and **data-driven** planners, even when modern papers combine them with optimization. It also emphasized methods that are reusable across aircraft classes, so mission-specific topics such as aeroelastic trajectory optimization, detailed propulsion scheduling, or certification-oriented implementation details were only touched indirectly. Some recent journal papers were only accessible through abstracts or repository versions rather than full publisher text, so the report prioritizes high-confidence methodological claims over exhaustive detail where access was limited.
+> 这里是在说明本文边界：它讨论的是 model-based optimization，不是 learning-based planning。也就是说，重点是“写出动力学、约束和目标函数，然后交给 solver”，而不是“用数据训练一个策略”。aeroelastic trajectory optimization 涉及结构弹性和气动耦合；detailed propulsion scheduling 涉及发动机/推进系统的详细控制；certification-oriented implementation 涉及适航、验证、冗余和安全标准。这些都很重要，但会把主题带到更专门的工程领域。
 
 A final caution for beginners: there is **no universally best method**. The best choice depends mainly on five structural questions: how nonlinear the dynamics are, how many path constraints are active, whether discrete logic matters, whether uncertainty must be explicit, and whether the solve must run offline or in real time. If those five issues are answered well, the solver choice usually becomes much easier.
+> 初学时可以把最后这五个问题当成 solver 选择 checklist：
+> 1. 动力学有多非线性？如果很非线性，通常要 NLP、SCP 或 NMPC。
+> 2. path constraints 多不多、会不会经常 active？如果约束很多，collocation/direct transcription 往往更自然。
+> 3. 有没有离散逻辑？如果有 yes/no 或模式切换，就要考虑 MIP/MINLP/hybrid OCP。
+> 4. 不确定性是否必须显式建模？如果必须，就要考虑 robust、stochastic 或 chance-constrained formulation。
+> 5. 是 offline 规划还是 real-time onboard replanning？offline 可以用高保真 sparse NLP；real-time 更常用 QP/SOCP/SCP/MPC 这类快速重复求解形式。
+> 读完本文后，真正要带走的不是“某个方法最好”，而是看到一个 aircraft trajectory problem 时，能先判断它的结构，再选择合适的建模和 solver 路线。
