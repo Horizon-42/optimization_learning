@@ -34,10 +34,14 @@ $$
 & \psi\!\big(x(t_0),t_0,x(t_f),t_f,p\big)=0 .
 \end{aligned}
 $$
+> s.t. means such that, 表示满足条件
 
 Here $L$ is the running cost, $\Phi$ is the endpoint cost, $g$ collects path constraints, and $\psi$ collects boundary/linkage constraints. This is the common backbone behind aircraft climb, cruise, descent, trajectory tracking, conflict-resolution, and obstacle-avoidance formulations. (sources: turn20view0, turn32view0)
 
 The **dynamic model** determines almost everything that follows computationally. At one end are simple **kinematic** or geometry-based models, such as Dubins-like path generators. They are cheap and useful for front-end planning, but they can produce trajectories that are dynamically infeasible for the real aircraft. At the other end are **point-mass** and **6-DoF rigid-body** models, sometimes coupled to algebraic performance relations or atmosphere/wind models. Recent aircraft work still most commonly uses point-mass models for planning, because they keep the optimization manageable while representing thrust, drag, climb, mass burn, bank, and wind effects well enough for many mission-level questions. (sources: turn37view0, turn41view0, turn26view1)
+
+> kinematic or geometry based model? 不对力建模，只关注路径形状
+> point mass model? 建模升力/阻力/推力/重力
 
 A representative aircraft point-mass formulation appears in flight-path optimization papers as
 
@@ -45,16 +49,75 @@ $$
 \begin{aligned}
 \dot V &= g\!\left(\frac{T\cos\alpha - D}{mg} - \sin\gamma\right),\\
 \dot \gamma &= \frac{(T\sin\alpha + L)\cos\mu - mg\cos\gamma}{mV},\\
-\dot \chi &= \frac{(T\sin\alpha + L)\sin\mu}{mV\cos\gamma},\\
-\dot x &= V\cos\gamma\cos\chi,\qquad
-\dot y = V\cos\gamma\sin\chi,\qquad
+\dot{\psi}_h &= \frac{(T\sin\alpha + L)\sin\mu}{mV\cos\gamma},\\
+\dot x &= V\cos\gamma\cos\psi_h,\qquad
+\dot y = V\cos\gamma\sin\psi_h,\qquad
 \dot h = V\sin\gamma .
 \end{aligned}
 $$
 
+这些变量的含义如下。这里的 $g$ 表示重力加速度，不是前面通用最优控制模板里的路径约束函数 $g(\cdot)$。
+
+| 符号 | 含义 |
+|---|---|
+| $V$ | 飞机沿航迹方向的速度，通常可理解为真空速 |
+| $\gamma$ | 航迹角；正值表示爬升，负值表示下降 |
+| $\psi_h$ | 水平面内的航向角或航迹角；下标 $h$ 表示 horizontal/heading，用来和前面的边界约束函数 $\psi(\cdot)$ 区分 |
+| $x,y$ | 水平位置坐标 |
+| $h$ | 高度 |
+| $T$ | 推力大小 |
+| $D$ | 阻力 |
+| $L$ | 升力 |
+| $m$ | 飞机质量 |
+| $g$ | 重力加速度 |
+| $\alpha$ | 迎角；在这个简化式中，它把推力分解为沿航迹方向的 $T\cos\alpha$ 和法向的 $T\sin\alpha$ |
+| $\mu$ | 坡度角或滚转角；它把升力分解为竖直分量和横向转弯分量 |
+| $\dot{(\ )}$ | 对时间求导，例如 $\dot V=dV/dt$ |
+
+第一条方程描述的是**速度变化**。展开后等价于
+
+$$
+\dot V = \frac{T\cos\alpha-D}{m} - g\sin\gamma .
+$$
+
+其中 $T\cos\alpha-D$ 是沿航迹方向的净力：推力让飞机加速，阻力让飞机减速。$g\sin\gamma$ 是重力在航迹方向上的分量：爬升时它抵消加速，下降时它可能帮助加速。
+
+第二条方程描述的是**航迹角变化**。分子比较的是速度法向上的可用力和重力法向分量：
+
+$$
+(T\sin\alpha+L)\cos\mu - mg\cos\gamma .
+$$
+
+升力和推力的法向分量会使速度方向向上转，重力会使速度方向向下转。除以 $mV$ 是把法向加速度转换成角速度。因此在同样的法向力下，飞机速度越大，航迹角 $\gamma$ 通常变化得越慢。
+
+第三条方程描述的是**航向角变化**：
+
+$$
+\dot{\psi}_h = \frac{(T\sin\alpha + L)\sin\mu}{mV\cos\gamma}.
+$$
+
+只有法向力的横向分量会让飞机在水平面内转弯。这个横向分量主要由飞机倾斜产生，对应公式里的 $\sin\mu$。分母中的 $V\cos\gamma$ 是水平速度，因为 $\psi_h$ 是水平面内的角度。
+
+最后三条方程是**位置运动学关系**。水平速度是 $V\cos\gamma$，航向角 $\psi_h$ 把它分解到 $x$ 和 $y$ 两个方向：
+
+$$
+\dot x = V\cos\gamma\cos\psi_h,\qquad
+\dot y = V\cos\gamma\sin\psi_h .
+$$
+
+高度变化率是
+
+$$
+\dot h = V\sin\gamma .
+$$
+
+因此，$\gamma>0$ 表示高度增加，$\gamma<0$ 表示高度降低，$\gamma=0$ 在这个简化模型里对应平飞。
+
 This is already rich enough to encode fuel-time-noise tradeoffs, flight-envelope limitations, terrain or approach-path geometry, and safety constraints. ATM-oriented planning often simplifies further to 3-DoF point-mass models with wind-coupled algebraic equations, latitude/longitude progression, and mass dynamics drawn from aircraft performance models such as BADA. (sources: turn26view1, turn41view2)
+> flight-envelope: 飞行包线 飞行范围包络，指飞机能够安全飞行的所有边界集合
 
 The objective function depends on the application. Common choices are **fuel burn**, **flight time**, **direct operating cost**, **tracking error**, **control effort**, **climate cost**, **noise metrics**, or weighted combinations of these. For commercial-aircraft 4D planning, multi-phase optimal-control formulations often combine fuel, time, emissions, and operational constraints; for UAS local planning, control smoothness and feasibility are often dominant; for ATM conflict resolution, the problem may even be a feasibility problem first and a cost-minimization problem second. (sources: turn34search1, turn36search8, turn13search3, turn29view0)
+
 
 The decision variables can be split into two classes. **Continuous decisions** include thrust, bank angle, angle of attack, speed profile, climb rate, turn rate, or actuator histories. **Discrete decisions** include mode switches, whether to pass left or right of an obstacle, flight-level changes, whether to activate a phase, or which conflict-resolution maneuver family to choose. When those discrete decisions are important, the clean continuous OCP above becomes a **hybrid optimal-control problem** or a **mixed-integer optimal-control problem**. That modeling step is often more important than the eventual choice of solver. (sources: turn36search14, turn34search3, turn29view0)
 
@@ -65,6 +128,10 @@ Uncertainty can enter through wind, atmospheric forecasts, initial mass, state-e
 ### Pontryagin, Bellman, and what they mean for trajectories
 
 Two grand theoretical viewpoints dominate trajectory optimization. The first is **Pontryagin-style optimal control**, which turns the problem into necessary conditions on states, controls, and **costates**—that is, time-varying Lagrange multipliers attached to the dynamics. The second is **Bellman-style dynamic programming**, which solves for the **value function**—the best possible remaining cost from each state—and in principle produces a feedback law directly. These are complementary, not competing, viewpoints. (sources: turn20view0, turn17search11, turn12search17)
+
+> Costate: 协态变量 或 伴随变量, 和状态方程配套的一组“反向传播”的微分方程
+> - 普通约束优化里，乘子告诉你某个约束的边际价值
+> - 最优控制里，costate 告诉你某个状态轨迹约束/动力学约束的边际价值
 
 For
 
@@ -108,7 +175,13 @@ $$
 
 This is theoretically stronger than PMP because it characterizes optimal feedback, not just optimal trajectories. In aircraft work it has been used for low-dimensional flight-path optimization and feedback-style arrival/approach problems, but in practice it is most effective when the state dimension is modest. (sources: turn17search15, turn26view1, turn12search17, turn10search9)
 
-The engineering tradeoff is thus clear. **PMP/indirect methods** give structure, sharp necessary conditions, and sometimes elegant analytic insight, but they lead to sensitive two-point or multipoint boundary-value problems. **HJB/DP** gives feedback and global optimality on the solved grid, but the computation can become prohibitive as the modeled state space grows. That is one reason direct transcription became so dominant in aircraft trajectory practice. (sources: turn20view0, turn26view1)
+The practical conclusion is easier to understand if the two theoretical routes are separated.
+
+**PMP** means **Pontryagin Maximum Principle**. It is the basis of many **indirect methods**: first derive the necessary conditions for optimality, then solve the resulting equations. These equations include the original state dynamics, the costate dynamics, and the Hamiltonian optimality condition. The difficulty is that this usually becomes a **two-point boundary-value problem**: the aircraft state is constrained at the start, while costate or transversality conditions are often imposed at the end. Numerically, one has to guess missing costates, switching times, or arc structures so that the final boundary conditions are hit exactly. Small changes in those guesses can cause large terminal errors, especially for long aircraft trajectories, active path constraints, or multiphase missions.
+
+**HJB/DP** means **Hamilton-Jacobi-Bellman / Dynamic Programming**. Instead of solving for one trajectory, it solves for a value function $V(x,t)$ over the state space. This is theoretically attractive because the value function gives a feedback policy: if the aircraft is at state $x$ at time $t$, the policy tells it what to do next. On a solved grid, this can provide global optimality relative to that grid. The difficulty is computational: if each state dimension uses $N$ grid points and the model has $n$ states, the grid can scale like $N^n$. Even a moderate aircraft model with states such as position, altitude, speed, flight-path angle, heading, and mass can become too large very quickly.
+
+That is why **direct transcription** became the practical default in much aircraft trajectory optimization. It does not try to solve the costate boundary-value problem directly, and it does not solve over the entire state-space grid. Instead, it discretizes the trajectory itself: states and controls at time nodes become decision variables, dynamics become algebraic constraints, and the result is a large but sparse nonlinear program. This loses the clean global guarantees of HJB and usually gives only a local optimum, but it is much easier to combine with aircraft envelope constraints, fuel models, terrain or separation constraints, and multiphase flight procedures. (sources: turn20view0, turn26view1)
 
 ### Direct transcription, shooting, and collocation
 
