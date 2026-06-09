@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trust-Krylov Algorithm</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script>
+      window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page">
+        <p class="kicker">Krylov trust-region minimization</p>
+        <h1>Trust-Region Truncated Generalized Lanczos / Conjugate Gradient algorithm</h1>
+        <p class="lede">
+          trust-krylov solves the same trust-region Newton subproblem as
+          trust-ncg, but solves it more accurately inside a Krylov subspace. It is
+          especially useful when Hessian-vector products are cheap and curvature
+          is difficult or indefinite.
+        </p>
+        <nav class="nav-row" aria-label="Page navigation">
+          <a class="pill" href="../index.html">Overview</a>
+          <a class="pill" href="nelder-mead.html">Nelder-Mead</a>
+          <a class="pill" href="bfgs.html">BFGS</a>
+          <a class="pill" href="newton-cg.html">Newton-CG</a>
+          <a class="pill" href="trust-ncg.html">trust-ncg</a>
+          <a class="pill active" href="trust-krylov.html">trust-krylov</a>
+          <a class="pill" href="trust-exact.html">trust-exact</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page content">
+      <article>
+        <section id="idea">
+          <h2>Core Idea</h2>
+          <p>
+            trust-krylov uses the same local quadratic model and trust radius:
+          </p>
+          <div class="equation-block">
+            \[
+              \min_{p}
+              m_k(p)
+              =
+              f(x_k)+g_k^\mathsf{T}p+\frac{1}{2}p^\mathsf{T}H_kp
+              \quad
+              \text{subject to}
+              \quad
+              \|p\|\leq\Delta_k.
+            \]
+          </div>
+          <p>
+            The difference is how the subproblem is solved. Instead of using a
+            truncated CG step alone, trust-krylov solves the subproblem in a
+            growing Krylov subspace:
+          </p>
+          <div class="equation-block">
+            \[
+              \mathcal{K}_m(H_k,g_k)
+              =
+              \operatorname{span}\{g_k,H_kg_k,H_k^2g_k,\ldots,H_k^{m-1}g_k\}.
+            \]
+          </div>
+        </section>
+
+        <section id="subspace">
+          <h2>Krylov Subspace Solve</h2>
+          <p>
+            Inside the subspace, the large Hessian is represented by a much
+            smaller projected matrix. The GLTR idea is to solve the trust-region
+            problem accurately in that low-dimensional space:
+          </p>
+          <div class="equation-block">
+            \[
+              p_m=Z_my_m,
+              \qquad
+              \min_{\|y\|\leq\Delta_k}
+              g_m^\mathsf{T}y+\frac{1}{2}y^\mathsf{T}T_my,
+              \qquad
+              T_m=Z_m^\mathsf{T}H_kZ_m.
+            \]
+          </div>
+          <figure>
+            <img src="../assets/trust_krylov_subspace_progress.svg" alt="Krylov subspace trust-region improvement by dimension" />
+            <figcaption>
+              As the Krylov subspace grows, the projected trust-region step
+              approaches the full-space model step. Extra Hessian-vector products
+              buy a more accurate subproblem solution.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="../assets/trust_krylov_indefinite_model.svg" alt="Indefinite trust-region model with negative curvature" />
+            <figcaption>
+              For indefinite models, the useful direction can be a boundary step
+              along negative curvature. Krylov methods are good at exposing that
+              curvature without dense Hessian factorizations.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="rosenbrock">
+          <h2>Rosenbrock Example</h2>
+          <p>
+            On Rosenbrock, trust-krylov can use the full Hessian or just Hessian
+            products. The Hessian-vector product interface keeps the method
+            suitable for large-scale problems:
+          </p>
+          <div class="equation-block">
+            \[
+              H_kv
+              \quad\text{is enough to build}\quad
+              \mathcal{K}_m(H_k,g_k).
+            \]
+          </div>
+          <figure>
+            <img src="../assets/trust_krylov_rosenbrock_path.svg" alt="trust-krylov path on Rosenbrock contours" />
+            <figcaption>
+              From the same two-dimensional start used for Newton-CG and
+              trust-ncg, trust-krylov reaches the Rosenbrock minimum with a
+              sequence of accepted trust-region steps.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="scipy">
+          <h2>Using SciPy</h2>
+          <p>
+            In SciPy, use <code>method="trust-krylov"</code>. Provide
+            <code>jac</code> and either <code>hess</code> or <code>hessp</code>.
+            The Hessian-vector product version is often the point of the method.
+          </p>
+          <pre><code>import numpy as np
+from scipy.optimize import minimize
+
+def rosen(x):
+    return np.sum(100.0 * (x[1:] - x[:-1]**2.0)**2.0 + (1 - x[:-1])**2.0)
+
+def rosen_der(x):
+    xm = x[1:-1]
+    xm_m1 = x[:-2]
+    xm_p1 = x[2:]
+    der = np.zeros_like(x)
+    der[1:-1] = 200 * (xm - xm_m1**2) - 400 * (xm_p1 - xm**2) * xm - 2 * (1 - xm)
+    der[0] = -400 * x[0] * (x[1] - x[0]**2) - 2 * (1 - x[0])
+    der[-1] = 200 * (x[-1] - x[-2]**2)
+    return der
+
+def rosen_hess_p(x, p):
+    x = np.asarray(x)
+    Hp = np.zeros_like(x)
+    Hp[0] = (1200 * x[0]**2 - 400 * x[1] + 2) * p[0] - 400 * x[0] * p[1]
+    Hp[1:-1] = (
+        -400 * x[:-2] * p[:-2]
+        + (202 + 1200 * x[1:-1]**2 - 400 * x[2:]) * p[1:-1]
+        - 400 * x[1:-1] * p[2:]
+    )
+    Hp[-1] = -400 * x[-2] * p[-2] + 200 * p[-1]
+    return Hp
+
+x0 = np.array([1.3, 0.7, 0.8, 1.9, 1.2])
+result = minimize(
+    rosen,
+    x0,
+    method="trust-krylov",
+    jac=rosen_der,
+    hessp=rosen_hess_p,
+    options={"gtol": 1e-8, "disp": True},
+)
+
+print(result.x)</code></pre>
+        </section>
+
+        <section id="when">
+          <h2>When To Use It</h2>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Use trust-krylov when</th>
+                <th>Prefer another method when</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>You have gradients and Hessian-vector products for a large smooth problem.</td>
+                <td>You only have function values; derivative-free methods fit that information level better.</td>
+              </tr>
+              <tr>
+                <td>The Hessian may be indefinite and a more accurate trust-region subproblem solve is worth extra products.</td>
+                <td>Each Hessian-vector product is very expensive; trust-ncg may be cheaper per outer iteration.</td>
+              </tr>
+              <tr>
+                <td>You want fewer nonlinear iterations than trust-ncg on hard curvature.</td>
+                <td>The problem is medium-sized with a cheap dense Hessian; trust-exact may be more direct.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            Practical habit: compare both outer iterations and Hessian-vector
+            products. trust-krylov can reduce nonlinear iterations, but it may
+            spend more products inside each trust-region solve.
+          </div>
+        </section>
+
+        <p class="next-note">
+          Continue to <a href="trust-exact.html">trust-exact</a>, the nearly
+          exact dense trust-region method.
+        </p>
+      </article>
+
+      <aside class="toc" aria-label="trust-krylov sections">
+        <strong>On this page</strong>
+        <a href="#idea">Core idea</a>
+        <a href="#subspace">Krylov subspace</a>
+        <a href="#rosenbrock">Rosenbrock example</a>
+        <a href="#scipy">Using SciPy</a>
+        <a href="#when">When to use it</a>
+      </aside>
+    </main>
+  </body>
+</html>

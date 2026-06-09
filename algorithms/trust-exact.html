@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trust-Exact Algorithm</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script>
+      window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page">
+        <p class="kicker">Nearly exact trust-region minimization</p>
+        <h1>Trust-Region Nearly Exact algorithm</h1>
+        <p class="lede">
+          trust-exact solves each trust-region Newton subproblem much more
+          accurately than the iterative large-scale methods. It is the dense,
+          medium-size choice when gradients and full Hessians are available.
+        </p>
+        <nav class="nav-row" aria-label="Page navigation">
+          <a class="pill" href="../index.html">Overview</a>
+          <a class="pill" href="nelder-mead.html">Nelder-Mead</a>
+          <a class="pill" href="bfgs.html">BFGS</a>
+          <a class="pill" href="newton-cg.html">Newton-CG</a>
+          <a class="pill" href="trust-ncg.html">trust-ncg</a>
+          <a class="pill" href="trust-krylov.html">trust-krylov</a>
+          <a class="pill active" href="trust-exact.html">trust-exact</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page content">
+      <article>
+        <section id="idea">
+          <h2>Core Idea</h2>
+          <p>
+            trust-exact uses the same trust-region model as trust-ncg and
+            trust-krylov:
+          </p>
+          <div class="equation-block">
+            \[
+              \min_{p}
+              m_k(p)
+              =
+              f(x_k)+g_k^\mathsf{T}p+\frac{1}{2}p^\mathsf{T}H_kp
+              \quad
+              \text{subject to}
+              \quad
+              \|p\|\leq\Delta_k.
+            \]
+          </div>
+          <p>
+            The difference is ambition inside the subproblem. Instead of stopping
+            after a truncated CG or Krylov approximation, trust-exact solves a
+            nonlinear equation so the trust-region step is nearly the exact
+            minimizer of the quadratic model.
+          </p>
+        </section>
+
+        <section id="kkt">
+          <h2>Nearly Exact Subproblem Solve</h2>
+          <p>
+            A trust-region minimizer satisfies shifted Newton equations. For a
+            suitable Lagrange multiplier \(\lambda_k\), the step obeys
+          </p>
+          <div class="equation-block">
+            \[
+              (H_k+\lambda_k I)p_k=-g_k,
+              \qquad
+              H_k+\lambda_k I \succeq 0,
+              \qquad
+              \lambda_k \geq 0.
+            \]
+          </div>
+          <p>
+            The multiplier also satisfies complementarity:
+          </p>
+          <div class="equation-block">
+            \[
+              \|p_k\|\leq\Delta_k,
+              \qquad
+              \lambda_k(\|p_k\|-\Delta_k)=0.
+            \]
+          </div>
+          <p>
+            If the unconstrained Newton step is inside the trust radius, then
+            \(\lambda_k=0\). Otherwise, the method searches for a positive
+            \(\lambda_k\) that places \(p_k\) on the boundary.
+          </p>
+          <figure>
+            <img src="../assets/trust_exact_subproblem_solution.svg" alt="Nearly exact trust-region subproblem solution" />
+            <figcaption>
+              When the unconstrained Newton step falls outside the trust region,
+              the shifted system \((H+\lambda I)p=-g\) moves the step back to the
+              boundary while still minimizing the local quadratic model.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="cost">
+          <h2>Dense Hessian Tradeoff</h2>
+          <p>
+            trust-exact needs the explicit Hessian. That rules out the
+            Hessian-vector product shortcut used by Newton-CG, trust-ncg, and
+            trust-krylov, but it can reduce outer iterations when dense
+            factorizations are affordable.
+          </p>
+          <div class="equation-block">
+            \[
+              \text{storage}(H_k)=O(N^2),
+              \qquad
+              \text{dense factorization}=O(N^3).
+            \]
+          </div>
+          <figure>
+            <img src="../assets/trust_exact_dense_cost.svg" alt="Dense Hessian storage and factorization cost scaling" />
+            <figcaption>
+              The nearly exact subproblem solve is powerful for moderate
+              dimensions, but dense Hessian storage and repeated factorizations
+              dominate as \(N\) grows.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="rosenbrock">
+          <h2>Rosenbrock Example</h2>
+          <p>
+            The SciPy tutorial demonstrates trust-exact on the Rosenbrock
+            function with a gradient and full Hessian. In two dimensions the
+            Hessian is
+          </p>
+          <div class="equation-block">
+            \[
+              H(x)=
+              \begin{bmatrix}
+                1200x_0^2-400x_1+2 & -400x_0\\
+                -400x_0 & 200
+              \end{bmatrix}.
+            \]
+          </div>
+          <figure>
+            <img src="../assets/trust_exact_rosenbrock_path.svg" alt="trust-exact path on Rosenbrock contours" />
+            <figcaption>
+              From the same two-dimensional start used by the trust-ncg and
+              trust-krylov pages, trust-exact reaches the Rosenbrock minimum with
+              nearly exact dense trust-region steps.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="scipy">
+          <h2>Using SciPy</h2>
+          <p>
+            In SciPy, use <code>method="trust-exact"</code>. Provide
+            <code>jac</code> and <code>hess</code>; this method does not support
+            a Hessian-vector product-only interface.
+          </p>
+          <pre><code>import numpy as np
+from scipy.optimize import minimize
+
+def rosen(x):
+    return np.sum(100.0 * (x[1:] - x[:-1]**2.0)**2.0 + (1 - x[:-1])**2.0)
+
+def rosen_der(x):
+    xm = x[1:-1]
+    xm_m1 = x[:-2]
+    xm_p1 = x[2:]
+    der = np.zeros_like(x)
+    der[1:-1] = 200 * (xm - xm_m1**2) - 400 * (xm_p1 - xm**2) * xm - 2 * (1 - xm)
+    der[0] = -400 * x[0] * (x[1] - x[0]**2) - 2 * (1 - x[0])
+    der[-1] = 200 * (x[-1] - x[-2]**2)
+    return der
+
+def rosen_hess(x):
+    x = np.asarray(x)
+    H = np.diag(-400 * x[:-1], 1) - np.diag(400 * x[:-1], -1)
+    diagonal = np.zeros_like(x)
+    diagonal[0] = 1200 * x[0]**2 - 400 * x[1] + 2
+    diagonal[-1] = 200
+    diagonal[1:-1] = 202 + 1200 * x[1:-1]**2 - 400 * x[2:]
+    return H + np.diag(diagonal)
+
+x0 = np.array([1.3, 0.7, 0.8, 1.9, 1.2])
+result = minimize(
+    rosen,
+    x0,
+    method="trust-exact",
+    jac=rosen_der,
+    hess=rosen_hess,
+    options={"gtol": 1e-8, "disp": True},
+)
+
+print(result.x)</code></pre>
+        </section>
+
+        <section id="when">
+          <h2>When To Use It</h2>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Use trust-exact when</th>
+                <th>Prefer another method when</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>The problem is smooth, unconstrained, and medium-sized.</td>
+                <td>The problem has thousands of variables; matrix-free Newton-CG or trust-krylov is usually a better fit.</td>
+              </tr>
+              <tr>
+                <td>You can compute and store a reliable full Hessian.</td>
+                <td>You only have function values or gradients; Nelder-Mead or BFGS matches that information level better.</td>
+              </tr>
+              <tr>
+                <td>Reducing objective and gradient evaluations matters more than avoiding dense factorizations.</td>
+                <td>The Hessian is sparse and large enough that Hessian-vector products are much cheaper than factorization.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            Practical habit: reach for trust-exact after you know the full
+            Hessian is trustworthy and moderate in size. It is often elegant,
+            but it asks the linear algebra stack to do real work.
+          </div>
+        </section>
+
+        <p class="next-note">
+          This completes the unconstrained minimization algorithm list used in
+          the SciPy optimization tutorial.
+        </p>
+      </article>
+
+      <aside class="toc" aria-label="trust-exact sections">
+        <strong>On this page</strong>
+        <a href="#idea">Core idea</a>
+        <a href="#kkt">Nearly exact solve</a>
+        <a href="#cost">Dense Hessian tradeoff</a>
+        <a href="#rosenbrock">Rosenbrock example</a>
+        <a href="#scipy">Using SciPy</a>
+        <a href="#when">When to use it</a>
+      </aside>
+    </main>
+  </body>
+</html>

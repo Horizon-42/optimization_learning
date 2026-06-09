@@ -22,12 +22,12 @@
           own generated figures.
         </p>
         <nav class="nav-row" aria-label="Algorithm pages">
-          <a class="pill active" href="algorithms/nelder-mead.html">Nelder-Mead</a>
-          <span class="pill">BFGS</span>
-          <span class="pill">Newton-CG</span>
-          <span class="pill">trust-ncg</span>
-          <span class="pill">trust-krylov</span>
-          <span class="pill">trust-exact</span>
+          <a class="pill" href="algorithms/nelder-mead.html">Nelder-Mead</a>
+          <a class="pill" href="algorithms/bfgs.html">BFGS</a>
+          <a class="pill" href="algorithms/newton-cg.html">Newton-CG</a>
+          <a class="pill" href="algorithms/trust-ncg.html">trust-ncg</a>
+          <a class="pill" href="algorithms/trust-krylov.html">trust-krylov</a>
+          <a class="pill" href="algorithms/trust-exact.html">trust-exact</a>
         </nav>
       </div>
     </header>
@@ -45,20 +45,32 @@
         <article class="algorithm-card">
           <h3><a href="algorithms/nelder-mead.html">Nelder-Mead Simplex</a></h3>
           <p>Derivative-free search that moves and reshapes a simplex using reflection, expansion, contraction, and shrink steps.</p>
-          <span class="status">Finished in this step</span>
+          <span class="status">Complete</span>
         </article>
         <article class="algorithm-card">
-          <h3>BFGS</h3>
+          <h3><a href="algorithms/bfgs.html">BFGS</a></h3>
           <p>Quasi-Newton method that builds an inverse-Hessian approximation from gradient differences.</p>
-          <span class="status">Next</span>
+          <span class="status">Complete</span>
         </article>
         <article class="algorithm-card">
-          <h3>Newton-CG</h3>
+          <h3><a href="algorithms/newton-cg.html">Newton-CG</a></h3>
           <p>Uses gradients and Hessian-vector products to approximately solve the Newton system.</p>
+          <span class="status">Complete</span>
         </article>
         <article class="algorithm-card">
-          <h3>Trust-region Newton methods</h3>
-          <p>Chooses steps inside a local region where the quadratic model is trusted.</p>
+          <h3><a href="algorithms/trust-ncg.html">trust-ncg</a></h3>
+          <p>Trust-region Newton-CG method that constrains each quadratic-model step inside a radius.</p>
+          <span class="status">Complete</span>
+        </article>
+        <article class="algorithm-card">
+          <h3><a href="algorithms/trust-krylov.html">trust-krylov</a></h3>
+          <p>Solves the trust-region subproblem more accurately in a Krylov subspace.</p>
+          <span class="status">Complete</span>
+        </article>
+        <article class="algorithm-card">
+          <h3><a href="algorithms/trust-exact.html">trust-exact</a></h3>
+          <p>Nearly exact trust-region method for medium-size problems with explicit Hessians.</p>
+          <span class="status">Complete</span>
         </article>
       </section>
 
@@ -67,7 +79,12 @@
         Figures are generated with Python scripts in <code>scripts/</code> and written to
         <code>assets/</code>. For example:
       </p>
-      <pre><code>conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_nelder_mead_visuals.py</code></pre>
+      <pre><code>conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_nelder_mead_visuals.py
+conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_bfgs_visuals.py
+conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_newton_cg_visuals.py
+conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_trust_ncg_visuals.py
+conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_trust_krylov_visuals.py
+conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_trust_exact_visuals.py</code></pre>
     </main>
   </body>
 </html>

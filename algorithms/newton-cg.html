@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Newton-CG Algorithm</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script>
+      window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page">
+        <p class="kicker">Second-order line-search minimization</p>
+        <h1>Newton-Conjugate-Gradient algorithm</h1>
+        <p class="lede">
+          Newton-CG combines Newton's local quadratic model with conjugate
+          gradients. It uses gradients plus Hessian information, but it can avoid
+          explicitly storing or factorizing the full Hessian matrix.
+        </p>
+        <nav class="nav-row" aria-label="Page navigation">
+          <a class="pill" href="../index.html">Overview</a>
+          <a class="pill" href="nelder-mead.html">Nelder-Mead</a>
+          <a class="pill" href="bfgs.html">BFGS</a>
+          <a class="pill active" href="newton-cg.html">Newton-CG</a>
+          <a class="pill" href="trust-ncg.html">trust-ncg</a>
+          <a class="pill" href="trust-krylov.html">trust-krylov</a>
+          <a class="pill" href="trust-exact.html">trust-exact</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page content">
+      <article>
+        <section id="idea">
+          <h2>Core Idea</h2>
+          <p>
+            Near the current point \(x_k\), Newton methods replace the objective
+            with a quadratic model:
+          </p>
+          <div class="equation-block">
+            \[
+              m_k(p)
+              =
+              f(x_k) + g_k^\mathsf{T}p
+              + \frac{1}{2}p^\mathsf{T}H_kp,
+              \qquad
+              g_k=\nabla f(x_k),\quad H_k=\nabla^2 f(x_k).
+            \]
+          </div>
+          <p>
+            If \(H_k\) is positive definite, the exact Newton step solves
+          </p>
+          <div class="equation-block">
+            \[
+              H_kp_k=-g_k,
+              \qquad
+              x_{k+1}=x_k+\alpha_k p_k.
+            \]
+          </div>
+          <p>
+            Newton-CG does not usually invert \(H_k\). It applies conjugate
+            gradient iterations to the linear Newton system and then performs a
+            line search along the resulting direction.
+          </p>
+        </section>
+
+        <section id="cg">
+          <h2>Conjugate Gradient Inside Newton</h2>
+          <p>
+            Conjugate gradient builds the step from repeated Hessian-vector
+            products. That is the key large-scale advantage: the algorithm can ask
+            for \(H_kv\) without ever materializing every entry of \(H_k\).
+          </p>
+          <div class="equation-block">
+            \[
+              r_j=-g_k-H_kp_j,
+              \qquad
+              p_{j+1}=p_j+\eta_j d_j,
+              \qquad
+              d_i^\mathsf{T}H_kd_j=0\quad(i\ne j).
+            \]
+          </div>
+          <figure>
+            <img src="../assets/newton_cg_inner_cg_model.svg" alt="Conjugate gradient iterates inside a Newton quadratic model" />
+            <figcaption>
+              The inner CG loop solves the local quadratic model in step space.
+              In two dimensions it reaches the exact Newton step quickly; in
+              larger problems it is usually stopped after an approximate solve.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="../assets/newton_cg_hessp_scaling.svg" alt="Dense Hessian and Hessian-vector memory scaling" />
+            <figcaption>
+              A dense Hessian stores \(N^2\) numbers. A Hessian-vector product
+              interface lets Newton-CG keep the expensive second-order information
+              implicit.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="rosenbrock">
+          <h2>Rosenbrock Example</h2>
+          <p>
+            For the Rosenbrock function, the Hessian is sparse and banded. The
+            interior diagonal and neighbor terms are
+          </p>
+          <div class="equation-block">
+            \[
+              H_{ii}=202+1200x_i^2-400x_{i+1},
+              \qquad
+              H_{i,i+1}=H_{i+1,i}=-400x_i.
+            \]
+          </div>
+          <p>
+            The endpoint diagonal terms are
+          </p>
+          <div class="equation-block">
+            \[
+              H_{00}=1200x_0^2-400x_1+2,
+              \qquad
+              H_{N-1,N-1}=200.
+            \]
+          </div>
+          <p>
+            Supplying \(H(x)p\) is enough for SciPy's Newton-CG implementation:
+          </p>
+          <div class="equation-block">
+            \[
+              [H(x)p]_i
+              =
+              -400x_{i-1}p_{i-1}
+              +(202+1200x_i^2-400x_{i+1})p_i
+              -400x_ip_{i+1}.
+            \]
+          </div>
+          <figure>
+            <img src="../assets/newton_cg_rosenbrock_path.svg" alt="Newton-CG path on Rosenbrock contours" />
+            <figcaption>
+              On the Rosenbrock valley, Newton-CG uses Hessian-informed directions
+              and line search step lengths. The path reflects both the local
+              quadratic model and the global safeguard from line search.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="scipy">
+          <h2>Using SciPy</h2>
+          <p>
+            In SciPy, use <code>method="Newton-CG"</code>. Provide
+            <code>jac</code> and either a full Hessian through <code>hess</code>
+            or a Hessian-vector product through <code>hessp</code>.
+          </p>
+          <pre><code>import numpy as np
+from scipy.optimize import minimize
+
+def rosen(x):
+    return np.sum(100.0 * (x[1:] - x[:-1]**2.0)**2.0 + (1 - x[:-1])**2.0)
+
+def rosen_der(x):
+    xm = x[1:-1]
+    xm_m1 = x[:-2]
+    xm_p1 = x[2:]
+    der = np.zeros_like(x)
+    der[1:-1] = 200 * (xm - xm_m1**2) - 400 * (xm_p1 - xm**2) * xm - 2 * (1 - xm)
+    der[0] = -400 * x[0] * (x[1] - x[0]**2) - 2 * (1 - x[0])
+    der[-1] = 200 * (x[-1] - x[-2]**2)
+    return der
+
+def rosen_hess_p(x, p):
+    x = np.asarray(x)
+    Hp = np.zeros_like(x)
+    Hp[0] = (1200 * x[0]**2 - 400 * x[1] + 2) * p[0] - 400 * x[0] * p[1]
+    Hp[1:-1] = (
+        -400 * x[:-2] * p[:-2]
+        + (202 + 1200 * x[1:-1]**2 - 400 * x[2:]) * p[1:-1]
+        - 400 * x[1:-1] * p[2:]
+    )
+    Hp[-1] = -400 * x[-2] * p[-2] + 200 * p[-1]
+    return Hp
+
+x0 = np.array([1.3, 0.7, 0.8, 1.9, 1.2])
+result = minimize(
+    rosen,
+    x0,
+    method="Newton-CG",
+    jac=rosen_der,
+    hessp=rosen_hess_p,
+    options={"xtol": 1e-8, "disp": True},
+)
+
+print(result.x)</code></pre>
+        </section>
+
+        <section id="when">
+          <h2>When To Use It</h2>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Use Newton-CG when</th>
+                <th>Prefer another method when</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>You can compute gradients and Hessian-vector products for a smooth unconstrained problem.</td>
+                <td>You only have objective values; use a derivative-free method such as Nelder-Mead or Powell.</td>
+              </tr>
+              <tr>
+                <td>The problem is large enough that dense Hessian storage is unattractive.</td>
+                <td>The Hessian is badly conditioned or indefinite; trust-region Newton methods can be more reliable.</td>
+              </tr>
+              <tr>
+                <td>You want second-order curvature without explicitly inverting or factorizing the Hessian.</td>
+                <td>The problem is small and dense; direct Newton or trust-exact may need fewer outer iterations.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            Practical habit: start with <code>hessp</code> when the Hessian is
+            sparse, structured, or available through automatic differentiation.
+            It keeps the method closer to the math while avoiding dense matrix
+            bookkeeping.
+          </div>
+        </section>
+
+        <p class="next-note">
+          Continue to <a href="trust-ncg.html">trust-ncg</a>, the trust-region
+          cousin of Newton-CG.
+        </p>
+      </article>
+
+      <aside class="toc" aria-label="Newton-CG sections">
+        <strong>On this page</strong>
+        <a href="#idea">Core idea</a>
+        <a href="#cg">Conjugate gradient</a>
+        <a href="#rosenbrock">Rosenbrock example</a>
+        <a href="#scipy">Using SciPy</a>
+        <a href="#when">When to use it</a>
+      </aside>
+    </main>
+  </body>
+</html>
