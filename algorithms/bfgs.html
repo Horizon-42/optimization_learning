@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BFGS Quasi-Newton Algorithm</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script>
+      window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page">
+        <p class="kicker">Gradient-based local minimization</p>
+        <h1>Broyden-Fletcher-Goldfarb-Shanno algorithm</h1>
+        <p class="lede">
+          BFGS is the classic quasi-Newton workhorse. It uses gradients to infer
+          local curvature, then turns that curvature model into smarter search
+          directions without forming the true Hessian.
+        </p>
+        <nav class="nav-row" aria-label="Page navigation">
+          <a class="pill" href="../index.html">Overview</a>
+          <a class="pill" href="nelder-mead.html">Nelder-Mead</a>
+          <a class="pill active" href="bfgs.html">BFGS</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page content">
+      <article>
+        <section id="idea">
+          <h2>Core Idea</h2>
+          <p>
+            Newton's method would step with the inverse Hessian:
+          </p>
+          <div class="equation-block">
+            \[
+              x_{k+1}=x_k-\alpha_k \nabla^2 f(x_k)^{-1}\nabla f(x_k).
+            \]
+          </div>
+          <p>
+            BFGS keeps the Newton shape but replaces the true inverse Hessian with
+            an approximation \(H_k\). The search direction is
+            \(p_k=-H_k\nabla f(x_k)\), and a line search chooses the step length
+            \(\alpha_k\).
+          </p>
+          <div class="equation-block">
+            \[
+              x_{k+1}=x_k+\alpha_k p_k,
+              \qquad p_k=-H_k g_k,
+              \qquad g_k=\nabla f(x_k).
+            \]
+          </div>
+        </section>
+
+        <section id="update">
+          <h2>The BFGS Update</h2>
+          <p>
+            After one step, BFGS compares the displacement in parameter space with
+            the displacement in gradient space:
+          </p>
+          <div class="equation-block">
+            \[
+              s_k=x_{k+1}-x_k,
+              \qquad
+              y_k=g_{k+1}-g_k,
+              \qquad
+              \rho_k=\frac{1}{y_k^\mathsf{T}s_k}.
+            \]
+          </div>
+          <p>
+            The inverse-Hessian approximation is then updated by the rank-two
+            formula
+          </p>
+          <div class="equation-block">
+            \[
+              H_{k+1}
+              =
+              (I-\rho_k s_k y_k^\mathsf{T})H_k(I-\rho_k y_k s_k^\mathsf{T})
+              + \rho_k s_k s_k^\mathsf{T}.
+            \]
+          </div>
+          <p>
+            This update satisfies the secant condition \(H_{k+1}y_k=s_k\). When
+            \(y_k^\mathsf{T}s_k>0\), it also preserves a positive-definite
+            \(H_k\), so the search direction remains downhill.
+          </p>
+        </section>
+
+        <section id="rosenbrock">
+          <h2>Rosenbrock Example</h2>
+          <p>
+            For the \(N\)-variable Rosenbrock function
+          </p>
+          <div class="equation-block">
+            \[
+              f(x)=\sum_{i=0}^{N-2}100(x_{i+1}-x_i^2)^2+(1-x_i)^2,
+            \]
+          </div>
+          <p>
+            the interior gradient terms are
+          </p>
+          <div class="equation-block">
+            \[
+              \frac{\partial f}{\partial x_j}
+              =
+              200(x_j-x_{j-1}^2)
+              -400x_j(x_{j+1}-x_j^2)
+              -2(1-x_j).
+            \]
+          </div>
+          <p>
+            The endpoint derivatives are
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \frac{\partial f}{\partial x_0}
+              &=
+              -400x_0(x_1-x_0^2)-2(1-x_0),\\
+              \frac{\partial f}{\partial x_{N-1}}
+              &=
+              200(x_{N-1}-x_{N-2}^2).
+            \end{aligned}
+            \]
+          </div>
+          <figure>
+            <img src="../assets/bfgs_rosenbrock_path.svg" alt="BFGS path on Rosenbrock contours" />
+            <figcaption>
+              BFGS starts with steep gradient information, then bends its search
+              direction as the inverse-Hessian approximation learns the valley's
+              curvature.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="../assets/bfgs_evaluation_efficiency.svg" alt="BFGS and Nelder-Mead evaluation efficiency comparison" />
+            <figcaption>
+              With a useful gradient, BFGS usually reaches small function values
+              with far fewer objective evaluations than Nelder-Mead. Gradient
+              evaluations are the extra price paid for that curvature information.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="scipy">
+          <h2>Using SciPy</h2>
+          <p>
+            In SciPy, use <code>method="BFGS"</code> and pass the gradient through
+            <code>jac</code>. If <code>jac</code> is omitted, SciPy estimates the
+            gradient by finite differences.
+          </p>
+          <pre><code>import numpy as np
+from scipy.optimize import minimize
+
+def rosen(x):
+    return np.sum(100.0 * (x[1:] - x[:-1]**2.0)**2.0 + (1 - x[:-1])**2.0)
+
+def rosen_der(x):
+    xm = x[1:-1]
+    xm_m1 = x[:-2]
+    xm_p1 = x[2:]
+    der = np.zeros_like(x)
+    der[1:-1] = 200 * (xm - xm_m1**2) - 400 * (xm_p1 - xm**2) * xm - 2 * (1 - xm)
+    der[0] = -400 * x[0] * (x[1] - x[0]**2) - 2 * (1 - x[0])
+    der[-1] = 200 * (x[-1] - x[-2]**2)
+    return der
+
+x0 = np.array([1.3, 0.7, 0.8, 1.9, 1.2])
+result = minimize(
+    rosen,
+    x0,
+    method="BFGS",
+    jac=rosen_der,
+    options={"disp": True},
+)
+
+print(result.x)</code></pre>
+        </section>
+
+        <section id="when">
+          <h2>When To Use It</h2>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Use BFGS when</th>
+                <th>Prefer another method when</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>The objective is smooth and a gradient is available or cheap to estimate.</td>
+                <td>The number of variables is very large; storing a dense \(H_k\) can become expensive.</td>
+              </tr>
+              <tr>
+                <td>You want a strong default local optimizer without writing Hessian code.</td>
+                <td>The objective is noisy or nonsmooth enough that gradient differences become misleading.</td>
+              </tr>
+              <tr>
+                <td>The problem is unconstrained and moderate-sized.</td>
+                <td>You can provide Hessian-vector products for a large problem; Newton-CG or trust-krylov may scale better.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            Practical habit: check the gradient implementation before trusting the
+            optimizer. A sign error in \(g_k\) turns BFGS from a fast method into a
+            very confident wrong turn.
+          </div>
+        </section>
+
+        <p class="next-note">
+          Next algorithm step: Newton-CG, which uses Hessian information through
+          conjugate-gradient solves instead of a dense inverse-Hessian estimate.
+        </p>
+      </article>
+
+      <aside class="toc" aria-label="BFGS sections">
+        <strong>On this page</strong>
+        <a href="#idea">Core idea</a>
+        <a href="#update">The BFGS update</a>
+        <a href="#rosenbrock">Rosenbrock example</a>
+        <a href="#scipy">Using SciPy</a>
+        <a href="#when">When to use it</a>
+      </aside>
+    </main>
+  </body>
+</html>

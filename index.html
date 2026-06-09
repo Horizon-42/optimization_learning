@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Popular Unconstrained Optimization Algorithms</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script>
+      window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page">
+        <p class="kicker">SciPy optimize study notes</p>
+        <h1>Popular algorithms for unconstrained minimization</h1>
+        <p class="lede">
+          A visual, equation-first guide following the unconstrained minimization
+          categories in the SciPy optimization tutorial. The project is built one
+          algorithm at a time so each method can get a careful explanation and its
+          own generated figures.
+        </p>
+        <nav class="nav-row" aria-label="Algorithm pages">
+          <a class="pill active" href="algorithms/nelder-mead.html">Nelder-Mead</a>
+          <span class="pill">BFGS</span>
+          <span class="pill">Newton-CG</span>
+          <span class="pill">trust-ncg</span>
+          <span class="pill">trust-krylov</span>
+          <span class="pill">trust-exact</span>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page">
+      <h2>Roadmap</h2>
+      <p>
+        SciPy's unconstrained minimization section introduces derivative-free,
+        quasi-Newton, Newton-CG, and trust-region Newton methods. This site uses
+        the same category as its spine and adds visual intuition, practical rules
+        of thumb, and clean mathematical notation for each algorithm.
+      </p>
+
+      <section class="algorithm-grid" aria-label="Unconstrained minimization algorithms">
+        <article class="algorithm-card">
+          <h3><a href="algorithms/nelder-mead.html">Nelder-Mead Simplex</a></h3>
+          <p>Derivative-free search that moves and reshapes a simplex using reflection, expansion, contraction, and shrink steps.</p>
+          <span class="status">Finished in this step</span>
+        </article>
+        <article class="algorithm-card">
+          <h3>BFGS</h3>
+          <p>Quasi-Newton method that builds an inverse-Hessian approximation from gradient differences.</p>
+          <span class="status">Next</span>
+        </article>
+        <article class="algorithm-card">
+          <h3>Newton-CG</h3>
+          <p>Uses gradients and Hessian-vector products to approximately solve the Newton system.</p>
+        </article>
+        <article class="algorithm-card">
+          <h3>Trust-region Newton methods</h3>
+          <p>Chooses steps inside a local region where the quadratic model is trusted.</p>
+        </article>
+      </section>
+
+      <h2>Visualization Pipeline</h2>
+      <p>
+        Figures are generated with Python scripts in <code>scripts/</code> and written to
+        <code>assets/</code>. For example:
+      </p>
+      <pre><code>conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_nelder_mead_visuals.py</code></pre>
+    </main>
+  </body>
+</html>

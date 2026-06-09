@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nelder-Mead Simplex Algorithm</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script>
+      window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page">
+        <p class="kicker">Derivative-free local minimization</p>
+        <h1>Nelder-Mead Simplex algorithm</h1>
+        <p class="lede">
+          Nelder-Mead is a popular first choice when the objective is noisy,
+          awkward, or unavailable as a gradient. It probes the surface with a
+          simplex of \(n+1\) points and improves the worst point by geometric moves.
+        </p>
+        <nav class="nav-row" aria-label="Page navigation">
+          <a class="pill" href="../index.html">Overview</a>
+          <a class="pill active" href="nelder-mead.html">Nelder-Mead</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page content">
+      <article>
+        <section id="idea">
+          <h2>Core Idea</h2>
+          <p>
+            In \(n\) dimensions, a simplex has \(n+1\) vertices: a line segment in
+            one dimension, a triangle in two dimensions, a tetrahedron in three
+            dimensions, and so on. At each iteration the algorithm sorts the
+            vertices by objective value, keeps the best region, and tries to replace
+            the worst vertex.
+          </p>
+          <div class="equation-block">
+            \[
+              x_1, \ldots, x_{n+1}
+              \quad\text{with}\quad
+              f(x_1) \le f(x_2) \le \cdots \le f(x_{n+1}).
+            \]
+          </div>
+          <p>
+            The method does not estimate a derivative. That makes it robust for
+            small black-box problems, but it can be slower than gradient-based
+            algorithms such as BFGS once a reliable gradient is available.
+          </p>
+        </section>
+
+        <section id="moves">
+          <h2>Simplex Moves</h2>
+          <p>
+            Let \(x_h\) be the worst vertex, \(x_l\) the best vertex, and \(c\)
+            the centroid of all vertices except \(x_h\):
+          </p>
+          <div class="equation-block">
+            \[
+              c = \frac{1}{n}\sum_{i \ne h} x_i.
+            \]
+          </div>
+          <p>
+            Nelder-Mead then tests a small menu of geometric moves. A common
+            coefficient choice is \(\alpha=1\), \(\gamma=2\), \(\rho=\frac12\),
+            and \(\sigma=\frac12\).
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \text{reflection:}\quad &x_r = c + \alpha(c - x_h),\\
+              \text{expansion:}\quad &x_e = c + \gamma(x_r - c),\\
+              \text{contraction:}\quad &x_c = c + \rho(x_h - c),\\
+              \text{shrink:}\quad &x_i \leftarrow x_l + \sigma(x_i - x_l),\quad i \ne l.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            Reflection asks whether the opposite side of the simplex is better.
+            Expansion follows that direction farther when reflection is excellent.
+            Contraction pulls the bad vertex inward when reflection fails. Shrink
+            is the reset move: the simplex collapses around the best point.
+          </p>
+        </section>
+
+        <section id="rosenbrock">
+          <h2>Rosenbrock Example</h2>
+          <p>
+            The usual SciPy tutorial example is the Rosenbrock function. In two
+            dimensions it forms a narrow curved valley whose minimum is easy to
+            state but not always easy to reach:
+          </p>
+          <div class="equation-block">
+            \[
+              f(x_0,x_1)=100(x_1-x_0^2)^2+(1-x_0)^2,
+              \qquad x^\star=(1,1),\quad f(x^\star)=0.
+            \]
+          </div>
+          <figure>
+            <img src="../assets/nelder_mead_rosenbrock_path.svg" alt="Nelder-Mead simplex path on Rosenbrock contours" />
+            <figcaption>
+              The simplex moves through the Rosenbrock valley by changing only
+              objective values, not gradients. Later triangles become tiny near
+              the minimum.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="../assets/nelder_mead_convergence.svg" alt="Nelder-Mead convergence plot" />
+            <figcaption>
+              Function values usually decrease unevenly because the algorithm is
+              testing geometric proposals, not following a smooth gradient.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="scipy">
+          <h2>Using SciPy</h2>
+          <p>
+            In SciPy, choose this method through <code>minimize(..., method="Nelder-Mead")</code>.
+            It only needs the objective function.
+          </p>
+          <pre><code>import numpy as np
+from scipy.optimize import minimize
+
+def rosen(x):
+    return np.sum(100.0 * (x[1:] - x[:-1]**2.0)**2.0 + (1 - x[:-1])**2.0)
+
+x0 = np.array([1.3, 0.7, 0.8, 1.9, 1.2])
+result = minimize(
+    rosen,
+    x0,
+    method="Nelder-Mead",
+    options={"xatol": 1e-8, "disp": True},
+)
+
+print(result.x)</code></pre>
+        </section>
+
+        <section id="when">
+          <h2>When To Use It</h2>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Use Nelder-Mead when</th>
+                <th>Prefer another method when</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>The objective is low-dimensional and gradients are unavailable, unreliable, or expensive.</td>
+                <td>The problem has many variables; simplex methods scale poorly because the geometry becomes expensive to maintain.</td>
+              </tr>
+              <tr>
+                <td>You need a simple local search baseline for a black-box function.</td>
+                <td>You can provide gradients; BFGS usually reaches smooth minima with fewer evaluations.</td>
+              </tr>
+              <tr>
+                <td>The function is mildly noisy and derivative estimates would be unstable.</td>
+                <td>You need guaranteed convergence theory on difficult nonsmooth or constrained problems.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            Practical habit: run Nelder-Mead from several starting simplexes if the
+            surface may have multiple local minima. The method is local; it does
+            not prove that the best point found is globally optimal.
+          </div>
+        </section>
+
+        <p class="next-note">
+          Next algorithm step: BFGS, the most common quasi-Newton upgrade when a
+          smooth objective has gradients.
+        </p>
+      </article>
+
+      <aside class="toc" aria-label="Nelder-Mead sections">
+        <strong>On this page</strong>
+        <a href="#idea">Core idea</a>
+        <a href="#moves">Simplex moves</a>
+        <a href="#rosenbrock">Rosenbrock example</a>
+        <a href="#scipy">Using SciPy</a>
+        <a href="#when">When to use it</a>
+      </aside>
+    </main>
+  </body>
+</html>
