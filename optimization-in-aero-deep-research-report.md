@@ -167,11 +167,26 @@ $$
 V(x,t)=\min_{u(\cdot)}\left[\int_t^{t+\Delta t}L\,d\tau+V(x(t+\Delta t),t+\Delta t)\right]
 $$
 
-and expanding $x(t+\Delta t)\approx x+f(x,u,t)\Delta t$ and $V$ to first order yields the continuous-time **Hamilton–Jacobi–Bellman equation**
+Subtracting $V(x,t)$ from both sides, approximating the short integral by $L(x,u,t)\Delta t$, and dividing by $\Delta t$ gives the intermediate residual form
+
+$$
+0=\min_{u\in U}\left(L(x,u,t)+\frac{V(x+f(x,u,t)\Delta t,t+\Delta t)-V(x,t)}{\Delta t}\right),\qquad \Delta t\to0.
+$$
+
+Expanding $V(x+f(x,u,t)\Delta t,t+\Delta t)$ to first order then yields the continuous-time **Hamilton–Jacobi–Bellman equation**
 
 $$
 0=\min_{u\in U}\Big(L(x,u,t)+V_t(x,t)+\nabla_x V(x,t)^\top f(x,u,t)\Big).
 $$
+
+> 这个式子叫 Hamilton-Jacobi-Bellman equation，简称 HJB。它不是在求一条单独的轨迹，而是在整个状态空间上求 value function $V(x,t)$。
+> 左边的 $0$ 不是说代价为零，而是表示 Bellman 最优性条件的“残差”为零。直观推导是：从 $V(x,t)$ 出发，先走一个很小时间步 $\Delta t$，付出当前代价 $L\,\Delta t$，再加上下一状态的最优未来代价 $V(x+f\Delta t,t+\Delta t)$；把这个 Bellman 等式两边的 $V(x,t)$ 相减，再除以 $\Delta t$ 并令 $\Delta t\to0$，就得到 $0=L+V_t+\nabla_x V^\top f$。因此左边写成 $0$，表示“当前代价 + 未来 value function 的变化”在最优控制下必须刚好平衡。
+> $V(x,t)$ 表示：系统在时间 $t$ 处于状态 $x$ 时，从这里继续到终点所能达到的最小未来代价。
+> $L(x,u,t)$ 是当前这一瞬间的 running cost，例如燃油消耗率、时间代价或控制代价。
+> $V_t(x,t)$ 是 value function 对时间的变化率，表示“剩余时间变少”会怎样改变未来最优代价。
+> $\nabla_x V(x,t)^\top f(x,u,t)$ 表示当前控制 $u$ 通过动力学 $\dot{x}=f(x,u,t)$ 改变状态后，对未来代价造成的影响。
+> $\min_{u\in U}$ 表示在所有允许控制里选择让“当前代价 + 未来代价变化”最小的控制。
+> 所以 HJB 的直观意思是：最优控制在每个状态和时间上，都要让当前一步的代价与未来 value function 的变化达到最优平衡。解出 $V(x,t)$ 后，可以得到反馈策略，而不只是得到一条开环轨迹。
 
 This is theoretically stronger than PMP because it characterizes optimal feedback, not just optimal trajectories. In aircraft work it has been used for low-dimensional flight-path optimization and feedback-style arrival/approach problems, but in practice it is most effective when the state dimension is modest. (sources: turn17search15, turn26view1, turn12search17, turn10search9)
 
