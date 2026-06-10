@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Newton-CG Algorithm</title>
+    <title>Newton-CG Tutorial</title>
     <link rel="stylesheet" href="../styles.css" />
     <script>
       window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
@@ -14,11 +14,11 @@
     <header class="site-header">
       <div class="page">
         <p class="kicker">Second-order line-search minimization</p>
-        <h1>Newton-Conjugate-Gradient algorithm</h1>
+        <h1>Newton-CG tutorial</h1>
         <p class="lede">
-          Newton-CG combines Newton's local quadratic model with conjugate
-          gradients. It uses gradients plus Hessian information, but it can avoid
-          explicitly storing or factorizing the full Hessian matrix.
+          Newton-CG is a practical way to get Newton-like steps on large smooth
+          problems. It teaches the optimizer about curvature without forcing you
+          to store, factorize, or invert the full Hessian matrix.
         </p>
         <nav class="nav-row" aria-label="Page navigation">
           <a class="pill" href="../index.html">Overview</a>
@@ -34,11 +34,20 @@
 
     <main class="page content">
       <article>
-        <section id="idea">
-          <h2>Core Idea</h2>
+        <section id="why">
+          <h2>Why Newton-CG Exists</h2>
           <p>
-            Near the current point \(x_k\), Newton methods replace the objective
-            with a quadratic model:
+            Suppose you want to minimize a smooth function \(f(x)\). The
+            gradient \(g_k=\nabla f(x_k)\) points uphill, so \(-g_k\) points
+            downhill. That is enough to make progress, but not always enough to
+            make efficient progress. On a long, curved valley, steepest descent
+            can spend many steps crossing the valley walls instead of moving
+            along the valley floor.
+          </p>
+          <p>
+            Newton's method uses more information. It asks: "if the objective
+            near \(x_k\) were a quadratic bowl, where would the bottom of that
+            bowl be?" The local quadratic model is
           </p>
           <div class="equation-block">
             \[
@@ -47,85 +56,249 @@
               f(x_k) + g_k^\mathsf{T}p
               + \frac{1}{2}p^\mathsf{T}H_kp,
               \qquad
-              g_k=\nabla f(x_k),\quad H_k=\nabla^2 f(x_k).
+              H_k=\nabla^2 f(x_k).
             \]
           </div>
           <p>
-            If \(H_k\) is positive definite, the exact Newton step solves
+            Here \(p\) is not a point in the original problem. It is a proposed
+            movement away from \(x_k\). The gradient term \(g_k^\mathsf{T}p\)
+            predicts first-order slope. The Hessian term
+            \(\frac{1}{2}p^\mathsf{T}H_kp\) predicts how that slope bends as you
+            move.
+          </p>
+          <p>
+            The bottom of this quadratic model satisfies
+            \(\nabla m_k(p)=g_k+H_kp=0\), which gives the Newton equation:
           </p>
           <div class="equation-block">
             \[
-              H_kp_k=-g_k,
-              \qquad
-              x_{k+1}=x_k+\alpha_k p_k.
+              H_kp_k=-g_k.
             \]
           </div>
           <p>
-            Newton-CG does not usually invert \(H_k\). It applies conjugate
-            gradient iterations to the linear Newton system and then performs a
-            line search along the resulting direction.
+            A textbook Newton method might solve that system directly. Newton-CG
+            solves it approximately with conjugate gradients. That swap is the
+            whole idea: keep the useful curvature of Newton's method, but replace
+            a dense matrix solve with an iterative solve that only needs products
+            of the form \(H_kv\).
           </p>
+          <div class="callout">
+            Mental model: Newton-CG is not "gradient descent plus a fancy line
+            search." It is "fit a local quadratic, approximately find the bottom
+            of that quadratic, then use a line search to decide how far to move
+            in the real objective."
+          </div>
+        </section>
+
+        <section id="map">
+          <h2>The Algorithm Map</h2>
+          <p>
+            Newton-CG has two nested pieces. The outer loop is a line-search
+            optimizer. The inner loop is a conjugate-gradient solve of the
+            Newton system at the current point.
+          </p>
+          <ol>
+            <li>
+              Start at \(x_k\), evaluate \(f(x_k)\), the gradient \(g_k\), and a
+              way to apply the Hessian \(H_k\) to vectors.
+            </li>
+            <li>
+              Use conjugate gradients to find an approximate solution \(p_k\) to
+              \(H_kp=-g_k\). This gives a curvature-aware search direction.
+            </li>
+            <li>
+              Run a line search along that direction to choose a step length
+              \(\alpha_k\).
+            </li>
+            <li>
+              Move to \(x_{k+1}=x_k+\alpha_kp_k\), then repeat until the
+              gradient is small or another stopping rule is met.
+            </li>
+          </ol>
+          <p>
+            This separation is important. The inner CG solve proposes a
+            direction based on the local model. The line search checks that the
+            real function actually improves along that direction.
+          </p>
+          <figure>
+            <img src="../assets/newton_cg_line_search_anatomy.svg" alt="Python-generated Newton-CG line-search anatomy plot" />
+            <figcaption>
+              This generated plot uses a real Rosenbrock point. The quadratic
+              model is minimized by the full Newton step \(\alpha=1\), but the
+              true objective rises there. A line search accepts a shorter step
+              because it tests the real objective, not just the local model.
+            </figcaption>
+          </figure>
         </section>
 
         <section id="cg">
-          <h2>Conjugate Gradient Inside Newton</h2>
+          <h2>What CG Is Doing Inside</h2>
           <p>
-            Conjugate gradient builds the step from repeated Hessian-vector
-            products. That is the key large-scale advantage: the algorithm can ask
-            for \(H_kv\) without ever materializing every entry of \(H_k\).
+            Conjugate gradient is an iterative method for solving linear systems
+            like \(Ap=b\). In Newton-CG, \(A\) is the Hessian \(H_k\) and
+            \(b=-g_k\). The solve is repeated at each outer iteration because the
+            Hessian and gradient change when \(x_k\) changes.
+          </p>
+          <p>
+            A useful way to read the inner solve is:
           </p>
           <div class="equation-block">
             \[
-              r_j=-g_k-H_kp_j,
-              \qquad
-              p_{j+1}=p_j+\eta_j d_j,
-              \qquad
+              \text{find } p \text{ so that } H_kp \approx -g_k.
+            \]
+          </div>
+          <p>
+            At a trial step \(p_j\), the residual is the part of the Newton
+            equation that has not been explained yet:
+          </p>
+          <div class="equation-block">
+            \[
+              r_j=-g_k-H_kp_j.
+            \]
+          </div>
+          <p>
+            If \(r_j=0\), the Newton equation is solved exactly. Usually we do
+            not need that. The outer optimizer only needs a direction good
+            enough to reduce the objective, so the inner CG loop can stop early
+            when the residual is small enough, when a maximum inner iteration
+            budget is reached, or when the local curvature looks unsafe.
+          </p>
+          <p>
+            CG improves the step through search directions that are conjugate
+            with respect to the Hessian:
+          </p>
+          <div class="equation-block">
+            \[
               d_i^\mathsf{T}H_kd_j=0\quad(i\ne j).
             \]
           </div>
+          <p>
+            In ordinary words, once CG has optimized along one direction, later
+            directions are chosen so they do not undo that progress according to
+            the quadratic model. This is why CG can solve a two-dimensional
+            positive-definite quadratic in at most two exact iterations, and why
+            it can make useful partial progress in much larger dimensions.
+          </p>
           <figure>
             <img src="../assets/newton_cg_inner_cg_model.svg" alt="Conjugate gradient iterates inside a Newton quadratic model" />
             <figcaption>
-              The inner CG loop solves the local quadratic model in step space.
-              In two dimensions it reaches the exact Newton step quickly; in
-              larger problems it is usually stopped after an approximate solve.
-            </figcaption>
-          </figure>
-          <figure>
-            <img src="../assets/newton_cg_hessp_scaling.svg" alt="Dense Hessian and Hessian-vector memory scaling" />
-            <figcaption>
-              A dense Hessian stores \(N^2\) numbers. A Hessian-vector product
-              interface lets Newton-CG keep the expensive second-order information
-              implicit.
+              The inner CG loop lives in step space. Starting from \(p_0=0\), it
+              walks across the quadratic model toward the Newton step. In large
+              problems, Newton-CG usually stops before an exact solve because an
+              approximate direction is enough for the outer line search.
             </figcaption>
           </figure>
         </section>
 
+        <section id="hessp">
+          <h2>Why Hessian-Vector Products Matter</h2>
+          <p>
+            The phrase "uses the Hessian" can sound expensive, and a dense
+            Hessian really is expensive. For \(N\) variables, a dense Hessian has
+            \(N^2\) entries. At \(N=100{,}000\), storing it directly is already
+            unrealistic for ordinary hardware.
+          </p>
+          <p>
+            Newton-CG avoids that storage when you provide a Hessian-vector
+            product function. Instead of asking for all entries of \(H_k\), CG
+            repeatedly asks one question:
+          </p>
+          <div class="equation-block">
+            \[
+              \text{given a vector } v,\quad \text{return } H_kv.
+            \]
+          </div>
+          <p>
+            That product can often be computed from structure, sparsity,
+            automatic differentiation, or a matrix-free routine. The optimizer
+            receives the curvature information it needs without ever seeing a
+            dense matrix.
+          </p>
+          <figure>
+            <img src="../assets/newton_cg_hessp_scaling.svg" alt="Dense Hessian and Hessian-vector memory scaling" />
+            <figcaption>
+              Dense Hessian storage grows quadratically with the variable count.
+              A Hessian-vector product interface keeps the second-order work
+              iterative and makes Newton-CG attractive for large smooth problems.
+            </figcaption>
+          </figure>
+          <div class="callout">
+            Practical habit: if your Hessian is sparse, structured, or available
+            through automatic differentiation, start by writing <code>hessp</code>.
+            It is often simpler and more scalable than constructing the full
+            Hessian.
+          </div>
+        </section>
+
+        <section id="line-search">
+          <h2>Direction Is Not Step Length</h2>
+          <p>
+            The Newton equation gives a direction \(p_k\). It does not guarantee
+            that the full step \(x_k+p_k\) is safe for the original nonlinear
+            objective. The quadratic model is only a local approximation, and it
+            can be overconfident far from \(x_k\).
+          </p>
+          <p>
+            Newton-CG therefore uses a line search:
+          </p>
+          <div class="equation-block">
+            \[
+              x_{k+1}=x_k+\alpha_kp_k,
+              \qquad
+              \alpha_k>0.
+            \]
+          </div>
+          <p>
+            A basic sufficient-decrease test asks whether the objective dropped
+            enough compared with the directional derivative:
+          </p>
+          <div class="equation-block">
+            \[
+              f(x_k+\alpha p_k)
+              \le
+              f(x_k)+c_1\alpha g_k^\mathsf{T}p_k,
+              \qquad 0<c_1<1.
+            \]
+          </div>
+          <p>
+            Many implementations also use a curvature condition, giving a Wolfe
+            line search. You do not need to memorize the constants to understand
+            the role: the line search turns a locally promising direction into a
+            globally safer step.
+          </p>
+        </section>
+
         <section id="rosenbrock">
-          <h2>Rosenbrock Example</h2>
+          <h2>Watch It On Rosenbrock</h2>
           <p>
-            For the Rosenbrock function, the Hessian is sparse and banded. The
-            interior diagonal and neighbor terms are
+            The Rosenbrock function is a classic optimizer stress test:
           </p>
           <div class="equation-block">
             \[
-              H_{ii}=202+1200x_i^2-400x_{i+1},
-              \qquad
-              H_{i,i+1}=H_{i+1,i}=-400x_i.
+              f(x_0,x_1)=100(x_1-x_0^2)^2+(1-x_0)^2,
+              \qquad x^\star=(1,1),\quad f(x^\star)=0.
             \]
           </div>
           <p>
-            The endpoint diagonal terms are
+            The minimum is easy to state, but the valley is narrow and curved.
+            Gradient-only methods can zig-zag across the valley. Newton-CG uses
+            curvature to aim more directly along the valley while the line search
+            prevents reckless full steps.
           </p>
-          <div class="equation-block">
-            \[
-              H_{00}=1200x_0^2-400x_1+2,
-              \qquad
-              H_{N-1,N-1}=200.
-            \]
-          </div>
+          <figure>
+            <img src="../assets/newton_cg_rosenbrock_path.svg" alt="Newton-CG path on Rosenbrock contours" />
+            <figcaption>
+              On Rosenbrock contours, Newton-CG follows Hessian-informed
+              directions and lets the line search choose step lengths. The path
+              is shaped by both the local quadratic model and the real objective
+              values checked along each search line.
+            </figcaption>
+          </figure>
           <p>
-            Supplying \(H(x)p\) is enough for SciPy's Newton-CG implementation:
+            In more than two dimensions, Rosenbrock has a banded Hessian. That
+            means each variable interacts only with its neighbors, so a
+            Hessian-vector product can be computed without forming a dense
+            matrix. For an interior coordinate, the product has the pattern
           </p>
           <div class="equation-block">
             \[
@@ -136,52 +309,54 @@
               -400x_ip_{i+1}.
             \]
           </div>
-          <figure>
-            <img src="../assets/newton_cg_rosenbrock_path.svg" alt="Newton-CG path on Rosenbrock contours" />
-            <figcaption>
-              On the Rosenbrock valley, Newton-CG uses Hessian-informed directions
-              and line search step lengths. The path reflects both the local
-              quadratic model and the global safeguard from line search.
-            </figcaption>
-          </figure>
+          <p>
+            Read that formula like code: the \(i\)-th output uses the previous,
+            current, and next entries of \(p\). That local dependency is exactly
+            the kind of structure Newton-CG can exploit.
+          </p>
         </section>
 
         <section id="scipy">
-          <h2>Using SciPy</h2>
+          <h2>Use Newton-CG In SciPy</h2>
           <p>
-            In SciPy, use <code>method="Newton-CG"</code>. Provide
-            <code>jac</code> and either a full Hessian through <code>hess</code>
-            or a Hessian-vector product through <code>hessp</code>.
+            In SciPy, call <code>minimize</code> with
+            <code>method="Newton-CG"</code>. Provide an analytic gradient through
+            <code>jac</code>. When possible, provide <code>hessp</code> so the
+            optimizer can apply curvature without materializing the full Hessian.
           </p>
           <pre><code>import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import check_grad, minimize
 
 def rosen(x):
     return np.sum(100.0 * (x[1:] - x[:-1]**2.0)**2.0 + (1 - x[:-1])**2.0)
 
 def rosen_der(x):
-    xm = x[1:-1]
-    xm_m1 = x[:-2]
-    xm_p1 = x[2:]
     der = np.zeros_like(x)
-    der[1:-1] = 200 * (xm - xm_m1**2) - 400 * (xm_p1 - xm**2) * xm - 2 * (1 - xm)
+    der[1:-1] = (
+        200 * (x[1:-1] - x[:-2]**2)
+        - 400 * x[1:-1] * (x[2:] - x[1:-1]**2)
+        - 2 * (1 - x[1:-1])
+    )
     der[0] = -400 * x[0] * (x[1] - x[0]**2) - 2 * (1 - x[0])
     der[-1] = 200 * (x[-1] - x[-2]**2)
     return der
 
 def rosen_hess_p(x, p):
-    x = np.asarray(x)
-    Hp = np.zeros_like(x)
-    Hp[0] = (1200 * x[0]**2 - 400 * x[1] + 2) * p[0] - 400 * x[0] * p[1]
-    Hp[1:-1] = (
+    hp = np.zeros_like(x)
+    hp[0] = (1200 * x[0]**2 - 400 * x[1] + 2) * p[0] - 400 * x[0] * p[1]
+    hp[1:-1] = (
         -400 * x[:-2] * p[:-2]
         + (202 + 1200 * x[1:-1]**2 - 400 * x[2:]) * p[1:-1]
         - 400 * x[1:-1] * p[2:]
     )
-    Hp[-1] = -400 * x[-2] * p[-2] + 200 * p[-1]
-    return Hp
+    hp[-1] = -400 * x[-2] * p[-2] + 200 * p[-1]
+    return hp
 
 x0 = np.array([1.3, 0.7, 0.8, 1.9, 1.2])
+
+# A small value here is a strong sign that rosen_der matches rosen.
+print("gradient check:", check_grad(rosen, rosen_der, x0))
+
 result = minimize(
     rosen,
     x0,
@@ -191,7 +366,14 @@ result = minimize(
     options={"xtol": 1e-8, "disp": True},
 )
 
-print(result.x)</code></pre>
+print(result.x)
+print(result.fun)
+print(result.success, result.message)</code></pre>
+          <p>
+            The key function is <code>rosen_hess_p(x, p)</code>. It does not
+            return the Hessian. It returns the product \(H(x)p\). That is the
+            contract Newton-CG needs for its inner CG loop.
+          </p>
         </section>
 
         <section id="when">
@@ -205,24 +387,35 @@ print(result.x)</code></pre>
             </thead>
             <tbody>
               <tr>
-                <td>You can compute gradients and Hessian-vector products for a smooth unconstrained problem.</td>
-                <td>You only have objective values; use a derivative-free method such as Nelder-Mead or Powell.</td>
+                <td>You have a smooth unconstrained objective and a reliable gradient.</td>
+                <td>You only have function values; start with derivative-free methods such as Nelder-Mead or Powell.</td>
               </tr>
               <tr>
-                <td>The problem is large enough that dense Hessian storage is unattractive.</td>
-                <td>The Hessian is badly conditioned or indefinite; trust-region Newton methods can be more reliable.</td>
+                <td>You can compute Hessian-vector products more cheaply than storing a dense Hessian.</td>
+                <td>The problem is small and a dense Hessian factorization is cheap; direct Newton or trust-exact may need fewer outer iterations.</td>
               </tr>
               <tr>
-                <td>You want second-order curvature without explicitly inverting or factorizing the Hessian.</td>
-                <td>The problem is small and dense; direct Newton or trust-exact may need fewer outer iterations.</td>
+                <td>The variable count is large enough that \(O(N^2)\) Hessian storage is unattractive.</td>
+                <td>The objective is noisy, nonsmooth, or has unreliable gradients; the curvature model will be hard to trust.</td>
+              </tr>
+              <tr>
+                <td>You want second-order directions with line-search safeguards.</td>
+                <td>The Hessian is often indefinite or the line search struggles; trust-ncg or trust-krylov can be more robust.</td>
               </tr>
             </tbody>
           </table>
+          <p>
+            The most common Newton-CG disappointments are practical rather than
+            mysterious: wrong gradients, inconsistent Hessian-vector products,
+            badly scaled variables, or expecting the local quadratic model to be
+            reliable far from the current point.
+          </p>
           <div class="callout">
-            Practical habit: start with <code>hessp</code> when the Hessian is
-            sparse, structured, or available through automatic differentiation.
-            It keeps the method closer to the math while avoiding dense matrix
-            bookkeeping.
+            Debugging habit: if Newton-CG behaves strangely, first check that
+            <code>jac</code> matches the objective, then check that
+            <code>hessp(x, p)</code> matches finite differences of the gradient in
+            the direction \(p\). A sign error in either one can make a good
+            algorithm look chaotic.
           </div>
         </section>
 
@@ -234,10 +427,13 @@ print(result.x)</code></pre>
 
       <aside class="toc" aria-label="Newton-CG sections">
         <strong>On this page</strong>
-        <a href="#idea">Core idea</a>
-        <a href="#cg">Conjugate gradient</a>
-        <a href="#rosenbrock">Rosenbrock example</a>
-        <a href="#scipy">Using SciPy</a>
+        <a href="#why">Why it exists</a>
+        <a href="#map">Algorithm map</a>
+        <a href="#cg">Inner CG</a>
+        <a href="#hessp">Hessian-vector products</a>
+        <a href="#line-search">Line search</a>
+        <a href="#rosenbrock">Rosenbrock</a>
+        <a href="#scipy">SciPy usage</a>
         <a href="#when">When to use it</a>
       </aside>
     </main>
