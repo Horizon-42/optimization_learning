@@ -581,6 +581,82 @@
             measured, while changing the previous matrix as little as possible in
             a carefully chosen sense.
           </p>
+          <h3>Why Not Just Divide \(s_k\) By \(y_k\)?</h3>
+          <p>
+            In one variable, you actually can think this way. If \(s_k\),
+            \(y_k\), and \(H_{k+1}\) are all scalars, then
+            \(H_{k+1}y_k=s_k\) gives
+          </p>
+          <div class="equation-block">
+            \[
+              H_{k+1}=\frac{s_k}{y_k}.
+            \]
+          </div>
+          <p>
+            But in many variables, \(H_{k+1}\) is a matrix, while \(s_k\) and
+            \(y_k\) are vectors. Matrix-vector multiplication is not scalar
+            multiplication, so there is no single operation called "divide by
+            \(y_k\)" that recovers a matrix.
+          </p>
+          <p>
+            Write the two-dimensional case out. Let
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              H_{k+1}
+              &=
+              \begin{bmatrix}
+                h_{11} & h_{12}\\
+                h_{21} & h_{22}
+              \end{bmatrix},\\
+              y_k
+              &=
+              \begin{bmatrix}
+                y_1\\
+                y_2
+              \end{bmatrix},\\
+              s_k
+              &=
+              \begin{bmatrix}
+                s_1\\
+                s_2
+              \end{bmatrix}.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            Then the secant condition means
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              h_{11}y_1+h_{12}y_2 &= s_1,\\
+              h_{21}y_1+h_{22}y_2 &= s_2.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            That is only two equations, but the matrix has four unknown entries.
+            In \(n\) dimensions, \(H_{k+1}y_k=s_k\) gives \(n\) equations for
+            \(n^2\) matrix entries. So the secant condition alone does not define
+            a unique matrix. It only says what the matrix must do to this one
+            vector \(y_k\).
+          </p>
+          <p>
+            You could try a componentwise ratio such as
+            \(\operatorname{diag}(s_1/y_1,\ldots,s_n/y_n)\), but that is an
+            arbitrary diagonal choice. It ignores off-diagonal curvature: the
+            way changing one coordinate can affect the best movement in another
+            coordinate. Those cross effects are exactly why Newton and BFGS use
+            matrices instead of only per-coordinate scale factors.
+          </p>
+          <p>
+            BFGS therefore asks a more precise question: among the many matrices
+            that satisfy \(H_{k+1}y_k=s_k\), choose one that keeps symmetry,
+            preserves positive definiteness when the curvature sign is good, and
+            changes the previous matrix \(H_k\) in a controlled low-rank way.
+          </p>
           <p>
             In one sentence: \(s_k\) is what you did, \(y_k\) is how the gradient
             responded, and the secant condition makes the next curvature model
@@ -598,6 +674,80 @@
           <p>
             To get that behavior, BFGS uses this rank-two update:
           </p>
+          <h3>What Does "Rank-Two Update" Mean?</h3>
+          <p>
+            The update is easier to read if we separate the old matrix from the
+            correction being added to it:
+          </p>
+          <div class="equation-block">
+            \[
+              H_{k+1}=H_k+\Delta_k.
+            \]
+          </div>
+          <p>
+            A rank-two update means \(\Delta_k\) is a very structured correction.
+            It does not rebuild an entirely new inverse-Hessian approximation from
+            scratch. Instead, it changes the old matrix using at most two
+            directions learned from the latest step.
+          </p>
+          <p>
+            The basic building block is an outer product. If \(a\) and \(b\) are
+            vectors, then \(ab^\mathsf{T}\) is a matrix. When it acts on a vector
+            \(v\), it does two simple things:
+          </p>
+          <div class="equation-block">
+            \[
+              (ab^\mathsf{T})v
+              =
+              a(b^\mathsf{T}v).
+            \]
+          </div>
+          <p>
+            First \(b^\mathsf{T}v\) measures how much \(v\) points in the
+            \(b\)-direction. Then the result is put back in the \(a\)-direction.
+            So an outer product can only output multiples of one vector, \(a\).
+            That is why it is called rank one.
+          </p>
+          <p>
+            For BFGS, name the old matrix's current answer to the new gradient
+            change:
+          </p>
+          <div class="equation-block">
+            \[
+              q_k=H_k y_k.
+            \]
+          </div>
+          <p>
+            The secant condition says the new answer must be \(s_k\), but the old
+            answer is \(q_k\). So the correction has two intuitive jobs: remove
+            the old answer \(q_k\), and insert the measured answer \(s_k\).
+          </p>
+          <p>
+            If the compact BFGS formula is expanded, the correction can be written
+            in terms of only those two vectors:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              H_{k+1}-H_k
+              &=
+              \left(\rho_k+\rho_k^2 y_k^\mathsf{T}q_k\right)
+              s_k s_k^\mathsf{T}\\
+              &\quad
+              -\rho_k
+              \left(s_k q_k^\mathsf{T}+q_k s_k^\mathsf{T}\right).
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            This line has several outer-product-looking pieces, but every change
+            it makes points in the span of \(s_k\) and \(q_k\). In other words,
+            \(\Delta_k v\) is always some combination of those two vectors. That is
+            the practical meaning of "rank two" here: BFGS updates the huge matrix
+            through a two-direction correction, not by relearning all curvature
+            directions at once.
+          </p>
+          <h3>The Compact Formula</h3>
           <div class="equation-block">
             \[
             \begin{aligned}
@@ -613,12 +763,99 @@
             \]
           </div>
           <p>
-            You do not need to memorize the formula first. Focus on what it
-            guarantees. The two outer factors correct the old model so it respects
-            the new gradient-change direction. The final
-            \(\rho_k s_k s_k^\mathsf{T}\) term inserts the measured displacement.
-            Together they preserve symmetry and, when
-            \(y_k^\mathsf{T}s_k>0\), preserve positive definiteness.
+            Read the multiplication from right to left. The right factor removes
+            the \(y_k\)-direction before the old matrix \(H_k\) can return its old
+            answer \(q_k=H_k y_k\). The final term then inserts the answer BFGS
+            wants, \(s_k\).
+          </p>
+          <p>
+            Here is the key check without skipping the algebra. Apply the update
+            to \(y_k\). Because
+            \(\rho_k=1/(y_k^\mathsf{T}s_k)\), we have
+            \(\rho_k s_k^\mathsf{T}y_k=1\):
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              (I-\rho_k y_k s_k^\mathsf{T})y_k
+              &=
+              y_k-\rho_k y_k(s_k^\mathsf{T}y_k)\\
+              &=
+              y_k-y_k\\
+              &=
+              0.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            So the big old-model part contributes nothing when the input is
+            \(y_k\):
+          </p>
+          <div class="equation-block">
+            \[
+              (I-\rho_k s_k y_k^\mathsf{T})
+              H_k
+              (I-\rho_k y_k s_k^\mathsf{T})y_k
+              =
+              0.
+            \]
+          </div>
+          <p>
+            Only the inserted displacement term remains:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \rho_k s_k s_k^\mathsf{T}y_k
+              &=
+              \rho_k s_k(s_k^\mathsf{T}y_k)\\
+              &=
+              s_k.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            Put those two pieces together:
+          </p>
+          <div class="equation-block">
+            \[
+              H_{k+1}y_k=s_k.
+            \]
+          </div>
+          <p>
+            That is the secant condition. The formula may look intimidating, but
+            its most important job is simple: after the update, the matrix gives
+            the right answer for the gradient change BFGS just observed.
+          </p>
+          <h3>Why This Shape Is Useful</h3>
+          <p>
+            Many different matrices could satisfy \(H_{k+1}y_k=s_k\). BFGS uses
+            this particular symmetric rank-two correction because it preserves the
+            properties needed by the next search direction. If \(H_k\) is symmetric,
+            the new \(H_{k+1}\) is symmetric too. If \(H_k\) is positive definite
+            and \(y_k^\mathsf{T}s_k \gt 0\), then \(H_{k+1}\) stays positive
+            definite.
+          </p>
+          <p>
+            The positive-definite part can also be read directly from the compact
+            formula. For any vector \(v\), define
+            \(w=(I-\rho_k y_k s_k^\mathsf{T})v\). Then
+          </p>
+          <div class="equation-block">
+            \[
+              v^\mathsf{T}H_{k+1}v
+              =
+              w^\mathsf{T}H_k w
+              +
+              \rho_k(s_k^\mathsf{T}v)^2.
+            \]
+          </div>
+          <p>
+            If \(H_k\) is positive definite, the first term is never negative. If
+            \(y_k^\mathsf{T}s_k \gt 0\), then \(\rho_k\) is positive, so the second
+            term is never negative either. This is why the curvature sign matters:
+            it lets BFGS keep using \(p_k=-H_k g_k\) as a descent direction instead
+            of turning the inverse-Hessian approximation into something unstable.
           </p>
           <p>
             Positive definiteness matters because then \(p_k=-H_k g_k\) remains a
