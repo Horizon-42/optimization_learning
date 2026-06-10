@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Univariate Function Minimizers</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script>
+      window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page">
+        <p class="kicker">Scalar search with brackets and bounds</p>
+        <h1>Univariate function minimizers</h1>
+        <p class="lede">
+          When the input is a single scalar, <code>minimize_scalar</code> can use
+          one-dimensional structure directly. Brackets guide unconstrained
+          search; bounds turn the problem into interval-constrained scalar
+          minimization.
+        </p>
+        <nav class="nav-row" aria-label="Page navigation">
+          <a class="pill" href="../index.html">Overview</a>
+          <a class="pill" href="constrained-minimization.html">Constrained</a>
+          <a class="pill" href="global-optimization.html">Global optimization</a>
+          <a class="pill" href="least-squares.html">Least squares</a>
+          <a class="pill active" href="univariate-minimizers.html">Univariate</a>
+          <a class="pill" href="root-finding.html">Root finding</a>
+          <a class="pill" href="structured-optimization.html">Structured</a>
+          <a class="pill" href="advanced-usage.html">Advanced</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page content">
+      <article>
+        <section id="idea">
+          <h2>Core Idea</h2>
+          <p>
+            A univariate minimizer solves a scalar-input problem,
+          </p>
+          <div class="equation-block">
+            \[
+              \min_{x\in\mathbb{R}} f(x),
+            \]
+          </div>
+          <p>
+            or, when the feasible interval is known in advance,
+          </p>
+          <div class="equation-block">
+            \[
+              \min_{a\leq x\leq b} f(x).
+            \]
+          </div>
+          <p>
+            The SciPy tutorial exposes these solvers through
+            <code>minimize_scalar</code>. The unconstrained choices are
+            <code>method="brent"</code> and <code>method="golden"</code>, while
+            <code>method="bounded"</code> keeps every candidate inside a fixed
+            interval.
+          </p>
+        </section>
+
+        <section id="bracket">
+          <h2>Brackets and Brent Search</h2>
+          <p>
+            A good scalar bracket encloses a local minimum with a low middle
+            point:
+          </p>
+          <div class="equation-block">
+            \[
+              a<b<c,\qquad f(a)>f(b)<f(c).
+            \]
+          </div>
+          <p>
+            Brent's method mixes fast parabolic interpolation with more cautious
+            golden-section steps. Golden-section search is useful for learning
+            the interval-shrinking idea, but it is usually less efficient.
+          </p>
+          <figure>
+            <img src="../assets/univariate_brent_golden_search.svg" alt="Brent and golden-section scalar minimization probes" />
+            <figcaption>
+              Both methods receive the same bracket for
+              \(f(x)=(x-2)(x+1)^2\). Brent uses interpolation to concentrate
+              probes near the minimizer \(x^\star=1\) sooner.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="efficiency">
+          <h2>Evaluation Efficiency</h2>
+          <p>
+            In black-box scalar search, each function value can be expensive.
+            A useful diagnostic is the best objective gap after each probe:
+          </p>
+          <div class="equation-block">
+            \[
+              \Delta_k
+              =
+              \min_{1\leq i\leq k} f(x_i)-f^\star.
+            \]
+          </div>
+          <figure>
+            <img src="../assets/univariate_brent_golden_convergence.svg" alt="Best objective gap for Brent and golden-section scalar minimization" />
+            <figcaption>
+              On this smooth example, Brent reaches machine-scale accuracy with
+              far fewer objective evaluations than golden-section search.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="bounded">
+          <h2>Bounded Scalar Search</h2>
+          <p>
+            The bounded method adds a simple interval constraint. SciPy's
+            tutorial demonstrates it by minimizing the Bessel function
+            \(J_1(x)\) over \([4,7]\):
+          </p>
+          <div class="equation-block">
+            \[
+              \min_{4\leq x\leq 7} J_1(x).
+            \]
+          </div>
+          <figure>
+            <img src="../assets/univariate_bounded_bessel.svg" alt="Bounded scalar minimization of the Bessel function J1 over the interval 4 to 7" />
+            <figcaption>
+              The interval is part of the problem statement. The solver reports
+              the local minimum near \(x=5.3314\) without evaluating outside the
+              specified bounds.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="scipy">
+          <h2>Using SciPy</h2>
+          <p>
+            Pass a scalar function to <code>minimize_scalar</code>. Use a
+            bracket for unconstrained search when you can, and use
+            <code>bounds</code> for the bounded method.
+          </p>
+          <pre><code>from scipy.optimize import minimize_scalar
+from scipy.special import j1
+
+def f(x):
+    return (x - 2) * (x + 1)**2
+
+brent = minimize_scalar(f, method="brent", bracket=(-1.5, 0, 2.2))
+golden = minimize_scalar(f, method="golden", bracket=(-1.5, 0, 2.2))
+bounded = minimize_scalar(j1, method="bounded", bounds=(4, 7))
+
+print(brent.x, golden.x, bounded.x)</code></pre>
+        </section>
+
+        <section id="when">
+          <h2>When To Use It</h2>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Use when</th>
+                <th>Watch for</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>brent</code></td>
+                <td>You have a one-dimensional unconstrained objective and can provide a meaningful bracket.</td>
+                <td>A bracket encloses a local minimum, not necessarily the global minimum of a multimodal function.</td>
+              </tr>
+              <tr>
+                <td><code>golden</code></td>
+                <td>You want a simple educational baseline for bracket shrinking.</td>
+                <td>It usually needs more function evaluations than Brent.</td>
+              </tr>
+              <tr>
+                <td><code>bounded</code></td>
+                <td>The answer must lie inside a fixed interval \([a,b]\).</td>
+                <td>The method requires finite bounds and only searches inside them.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            Practical habit: plot the scalar objective first when it is cheap.
+            One-dimensional plots often reveal whether a bracket is sensible or
+            whether a bounded search interval is hiding multiple valleys.
+          </div>
+        </section>
+      </article>
+
+      <aside class="toc" aria-label="univariate minimizer sections">
+        <strong>On this page</strong>
+        <a href="#idea">Core idea</a>
+        <a href="#bracket">Brackets and Brent</a>
+        <a href="#efficiency">Efficiency</a>
+        <a href="#bounded">Bounded search</a>
+        <a href="#scipy">Using SciPy</a>
+        <a href="#when">When to use it</a>
+      </aside>
+    </main>
+  </body>
+</html>

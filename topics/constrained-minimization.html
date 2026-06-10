@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Constrained Minimization</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script>
+      window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page">
+        <p class="kicker">Local minimization with constraints</p>
+        <h1>Constrained minimization</h1>
+        <p class="lede">
+          Constrained local minimizers optimize a scalar objective while
+          respecting bounds, equalities, and inequalities. In the SciPy tutorial,
+          <code>trust-constr</code> uses object-style constraints, while
+          <code>SLSQP</code> uses the classic dictionary constraint interface.
+        </p>
+        <nav class="nav-row" aria-label="Page navigation">
+          <a class="pill" href="../index.html">Overview</a>
+          <a class="pill" href="../algorithms/trust-exact.html">Unconstrained</a>
+          <a class="pill active" href="constrained-minimization.html">Constrained</a>
+          <a class="pill" href="global-optimization.html">Global optimization</a>
+          <a class="pill" href="least-squares.html">Least squares</a>
+          <a class="pill" href="univariate-minimizers.html">Univariate</a>
+          <a class="pill" href="root-finding.html">Root finding</a>
+          <a class="pill" href="structured-optimization.html">Structured</a>
+          <a class="pill" href="advanced-usage.html">Advanced</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page content">
+      <article>
+        <section id="idea">
+          <h2>Core Idea</h2>
+          <p>
+            A constrained minimization problem adds feasible-set geometry to the
+            usual scalar objective:
+          </p>
+          <div class="equation-block">
+            \[
+              \begin{aligned}
+                \min_x\quad & f(x) \\
+                \text{subject to}\quad
+                & c^{\ell}\leq c(x)\leq c^{u},\\
+                & x^{\ell}\leq x\leq x^{u}.
+              \end{aligned}
+            \]
+          </div>
+          <p>
+            The optimizer must reduce the objective and drive constraint
+            violation toward zero. This changes the meaning of a good step:
+            moving downhill is not useful if the step leaves the feasible set in
+            a way the method cannot repair.
+          </p>
+        </section>
+
+        <section id="tutorial-problem">
+          <h2>Tutorial Problem</h2>
+          <p>
+            SciPy's constrained examples reuse the two-variable Rosenbrock
+            function with a mixture of linear, nonlinear, equality, inequality,
+            and bound constraints:
+          </p>
+          <div class="equation-block">
+            \[
+              \begin{aligned}
+                \min_{x_0,x_1}\quad
+                &100(x_1-x_0^2)^2+(1-x_0)^2\\
+                \text{subject to}\quad
+                &x_0+2x_1\leq1,\\
+                &x_0^2+x_1\leq1,\qquad x_0^2-x_1\leq1,\\
+                &2x_0+x_1=1,\\
+                &0\leq x_0\leq1,\qquad -0.5\leq x_1\leq2.
+              \end{aligned}
+            \]
+          </div>
+          <figure>
+            <img src="../assets/constrained_rosenbrock_geometry.svg" alt="Constrained Rosenbrock contours with feasible segment and optimizer paths" />
+            <figcaption>
+              The equality constraint collapses feasibility to a line segment.
+              Both constrained methods must approach the low Rosenbrock valley
+              while respecting the feasible geometry.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="methods">
+          <h2>trust-constr and SLSQP</h2>
+          <p>
+            <code>trust-constr</code> is the most expressive constrained local
+            optimizer in <code>minimize</code>: it supports bounds, linear and
+            nonlinear constraints, sparse derivatives, and second-order
+            information. <code>SLSQP</code> solves sequential quadratic
+            approximations and is compact for smaller smooth constrained
+            problems.
+          </p>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Constraint interface</th>
+                <th>Good fit</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>trust-constr</code></td>
+                <td><code>Bounds</code>, <code>LinearConstraint</code>, <code>NonlinearConstraint</code></td>
+                <td>General smooth constrained problems, especially when Hessians, Hessian-vector products, or sparsity are useful.</td>
+              </tr>
+              <tr>
+                <td><code>SLSQP</code></td>
+                <td>Dictionaries with <code>type</code>, <code>fun</code>, and optional <code>jac</code></td>
+                <td>Smaller smooth constrained problems where a mature SQP-style method is convenient.</td>
+              </tr>
+            </tbody>
+          </table>
+          <figure>
+            <img src="../assets/constrained_method_progress.svg" alt="Constrained optimizer objective progress and maximum constraint violation" />
+            <figcaption>
+              Constrained optimization has two coupled diagnostics: objective
+              progress and feasibility. A low objective is not enough until the
+              maximum constraint violation is also small.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="slack">
+          <h2>Constraint Slack</h2>
+          <p>
+            Inequality constraints are often easiest to audit through slack.
+            Positive slack means the constraint is satisfied; zero slack means
+            the constraint is active:
+          </p>
+          <div class="equation-block">
+            \[
+              s_j(x)=c_j^{u}-c_j(x)\geq0.
+            \]
+          </div>
+          <figure>
+            <img src="../assets/constrained_constraint_slack.svg" alt="Constraint slack values at the constrained Rosenbrock solution" />
+            <figcaption>
+              At the final point, the equality residual is essentially zero and
+              the inequality slacks are positive. That is the feasibility part
+              of the optimizer's success.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="scipy">
+          <h2>Using SciPy</h2>
+          <p>
+            The same problem can be represented with modern constraint objects
+            for <code>trust-constr</code>, or with dictionary constraints for
+            <code>SLSQP</code>.
+          </p>
+          <pre><code>import numpy as np
+from scipy.optimize import Bounds, LinearConstraint, NonlinearConstraint, minimize
+
+def rosen(x):
+    return 100.0 * (x[1] - x[0]**2)**2 + (1.0 - x[0])**2
+
+def rosen_der(x):
+    return np.array([
+        -400.0 * x[0] * (x[1] - x[0]**2) - 2.0 * (1.0 - x[0]),
+        200.0 * (x[1] - x[0]**2),
+    ])
+
+bounds = Bounds([0.0, -0.5], [1.0, 2.0])
+linear = LinearConstraint([[1.0, 2.0], [2.0, 1.0]], [-np.inf, 1.0], [1.0, 1.0])
+nonlinear = NonlinearConstraint(
+    lambda x: np.array([x[0]**2 + x[1], x[0]**2 - x[1]]),
+    [-np.inf, -np.inf],
+    [1.0, 1.0],
+)
+
+trust = minimize(
+    rosen,
+    x0=np.array([0.5, 0.0]),
+    method="trust-constr",
+    jac=rosen_der,
+    constraints=[linear, nonlinear],
+    bounds=bounds,
+)
+
+ineq_cons = {
+    "type": "ineq",
+    "fun": lambda x: np.array([
+        1.0 - x[0] - 2.0 * x[1],
+        1.0 - x[0]**2 - x[1],
+        1.0 - x[0]**2 + x[1],
+    ]),
+}
+eq_cons = {"type": "eq", "fun": lambda x: np.array([2.0 * x[0] + x[1] - 1.0])}
+
+slsqp = minimize(
+    rosen,
+    x0=np.array([0.5, 0.0]),
+    method="SLSQP",
+    jac=rosen_der,
+    constraints=[eq_cons, ineq_cons],
+    bounds=[(0.0, 1.0), (-0.5, 2.0)],
+)</code></pre>
+        </section>
+
+        <section id="when">
+          <h2>When To Use It</h2>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Use constrained minimization when</th>
+                <th>Prefer another family when</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>The objective is smooth and the feasible set is described by bounds, equalities, or inequalities.</td>
+                <td>The objective is naturally a residual vector; then <code>least_squares</code> may expose better structure.</td>
+              </tr>
+              <tr>
+                <td>You can provide analytic gradients or Jacobians for the objective and constraints.</td>
+                <td>The feasible set is combinatorial or discrete; then linear, assignment, or mixed-integer tools may fit better.</td>
+              </tr>
+              <tr>
+                <td>Feasibility matters as much as objective reduction.</td>
+                <td>The search space has many local minima and broad global exploration is the first concern.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            Practical habit: inspect both <code>result.fun</code> and constraint
+            violation. In constrained optimization, a pretty objective value is
+            only meaningful when the point is feasible.
+          </div>
+        </section>
+      </article>
+
+      <aside class="toc" aria-label="constrained minimization sections">
+        <strong>On this page</strong>
+        <a href="#idea">Core idea</a>
+        <a href="#tutorial-problem">Tutorial problem</a>
+        <a href="#methods">Methods</a>
+        <a href="#slack">Constraint slack</a>
+        <a href="#scipy">Using SciPy</a>
+        <a href="#when">When to use it</a>
+      </aside>
+    </main>
+  </body>
+</html>

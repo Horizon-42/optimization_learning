@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Custom Minimizers and Parallel Execution</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script>
+      window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page">
+        <p class="kicker">Advanced optimizer interfaces</p>
+        <h1>Custom minimizers and parallel execution</h1>
+        <p class="lede">
+          The final SciPy tutorial sections are not new algorithm families. They
+          show how to plug custom methods into <code>minimize</code> and how to
+          parallelize independent objective evaluations with <code>workers</code>.
+        </p>
+        <nav class="nav-row" aria-label="Page navigation">
+          <a class="pill" href="../index.html">Overview</a>
+          <a class="pill" href="constrained-minimization.html">Constrained</a>
+          <a class="pill" href="global-optimization.html">Global optimization</a>
+          <a class="pill" href="least-squares.html">Least squares</a>
+          <a class="pill" href="univariate-minimizers.html">Univariate</a>
+          <a class="pill" href="root-finding.html">Root finding</a>
+          <a class="pill" href="structured-optimization.html">Structured</a>
+          <a class="pill active" href="advanced-usage.html">Advanced</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page content">
+      <article>
+        <section id="custom">
+          <h2>Custom Minimizers</h2>
+          <p>
+            <code>minimize</code> normally receives a method name such as
+            <code>"BFGS"</code> or <code>"SLSQP"</code>. It can also receive a
+            callable method. That callable accepts the objective, starting point,
+            arguments, and options, then returns an <code>OptimizeResult</code>:
+          </p>
+          <div class="equation-block">
+            \[
+              \texttt{method(fun,\ x0,\ args,\ **options)}
+              \longrightarrow
+              \texttt{OptimizeResult}.
+            \]
+          </div>
+          <p>
+            This is useful when wrapping a domain-specific solver, experimenting
+            with a research method, or using a custom method inside another SciPy
+            optimizer such as <code>basinhopping</code>.
+          </p>
+          <figure>
+            <img src="../assets/advanced_custom_minimizer_path.svg" alt="Custom callable minimizer path on smooth objective contours" />
+            <figcaption>
+              A tiny coordinate-search minimizer is passed as a callable method
+              to <code>minimize</code>. It is intentionally simple, but it shows
+              the interface contract: produce a result object and preserve the
+              same objective-calling convention.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="workers">
+          <h2>Parallel Execution Support</h2>
+          <p>
+            Some SciPy optimizers accept a <code>workers</code> keyword. For
+            population methods such as <code>differential_evolution</code>, a
+            generation contains many independent candidates. For local
+            minimizers, numerical differentiation can also create independent
+            perturbation evaluations:
+          </p>
+          <div class="equation-block">
+            \[
+              \frac{\partial f}{\partial x_i}
+              \approx
+              \frac{f(x+h e_i)-f(x)}{h}.
+            \]
+          </div>
+          <p>
+            A two-point finite-difference gradient in \(N\) variables needs
+            \(N+1\) objective evaluations. If those calls are expensive and
+            independent, a map-like worker can evaluate several of them at once.
+          </p>
+          <figure>
+            <img src="../assets/advanced_parallel_workers_model.svg" alt="Finite-difference probes and relative batches with serial, workers, and vectorized map execution" />
+            <figcaption>
+              Workers reduce wall time only when there is enough independent
+              objective work to amortize process or dispatch overhead. For cheap
+              objectives, serial execution can still win.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="scipy">
+          <h2>Using SciPy</h2>
+          <p>
+            A custom minimizer should accept unknown keyword options so it remains
+            compatible with SciPy wrappers. For parallel execution, prefer a
+            reusable map-like callable when process startup overhead matters.
+          </p>
+          <pre><code>import numpy as np
+from multiprocessing import Pool
+from scipy.optimize import OptimizeResult, differential_evolution, minimize, rosen
+
+def custmin(fun, x0, args=(), stepsize=0.1, maxiter=100, callback=None, **options):
+    bestx = np.array(x0, dtype=float)
+    besty = fun(bestx, *args)
+    nfev = 1
+    for _ in range(maxiter):
+        improved = False
+        for dim in range(bestx.size):
+            for sign in (-1, 1):
+                trial = bestx.copy()
+                trial[dim] += sign * stepsize
+                value = fun(trial, *args)
+                nfev += 1
+                if value < besty:
+                    bestx, besty = trial, value
+                    improved = True
+                    if callback is not None:
+                        callback(bestx)
+        if not improved:
+            break
+    return OptimizeResult(x=bestx, fun=besty, success=True, nfev=nfev)
+
+custom = minimize(rosen, x0=np.array([1.3, 0.7, 0.8]), method=custmin)
+
+bounds = [(0.0, 10.0), (0.0, 10.0), (0.0, 10.0)]
+with Pool(2) as pool:
+    de = differential_evolution(rosen, bounds, workers=pool.map, updating="deferred")</code></pre>
+        </section>
+
+        <section id="when">
+          <h2>When To Use It</h2>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Feature</th>
+                <th>Use when</th>
+                <th>Watch for</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Custom method</td>
+                <td>You need to wrap a solver, prototype a method, or integrate with a SciPy meta-optimizer.</td>
+                <td>Return a complete <code>OptimizeResult</code> and accept extra options.</td>
+              </tr>
+              <tr>
+                <td><code>workers=int</code></td>
+                <td>You want SciPy to create a process pool for independent evaluations.</td>
+                <td>The objective must be pickleable; lambdas and closures often fail.</td>
+              </tr>
+              <tr>
+                <td>Map-like workers</td>
+                <td>You want to reuse a pool, use MPI, or vectorize batches of candidate evaluations.</td>
+                <td>Performance improves only when objective calls dominate overhead.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            Practical habit: parallelism is a throughput tool, not a convergence
+            tool. It can make a batch of objective calls faster, but it does not
+            make a weak model, bad scaling, or poor constraints disappear.
+          </div>
+        </section>
+      </article>
+
+      <aside class="toc" aria-label="advanced usage sections">
+        <strong>On this page</strong>
+        <a href="#custom">Custom minimizers</a>
+        <a href="#workers">Parallel workers</a>
+        <a href="#scipy">Using SciPy</a>
+        <a href="#when">When to use it</a>
+      </aside>
+    </main>
+  </body>
+</html>

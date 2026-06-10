@@ -28,6 +28,7 @@
           <a class="pill" href="#univariate">Univariate</a>
           <a class="pill" href="#root-finding">Root finding</a>
           <a class="pill" href="#linear-combinatorial">Linear and combinatorial</a>
+          <a class="pill" href="#advanced">Advanced usage</a>
         </nav>
       </div>
     </header>
@@ -47,7 +48,8 @@
           <h2>Local minimization of multivariate scalar functions</h2>
           <p>
             Local solvers refine one candidate point. The completed pages below
-            cover the unconstrained algorithms from the SciPy tutorial.
+            cover the unconstrained algorithms from the SciPy tutorial plus the
+            constrained methods that add bounds, equalities, and inequalities.
           </p>
         </div>
         <section class="algorithm-grid" aria-label="Local minimization algorithms">
@@ -79,6 +81,15 @@
           <article class="algorithm-card">
             <h3><a href="algorithms/trust-exact.html">trust-exact</a></h3>
             <p>Nearly exact trust-region method for medium-size problems with explicit Hessians.</p>
+            <span class="status">Complete</span>
+          </article>
+          <article class="algorithm-card">
+            <h3><a href="topics/constrained-minimization.html">Constrained minimization</a></h3>
+            <p>Bounds, linear and nonlinear constraints, trust-constr geometry, and SLSQP feasibility checks.</p>
+            <div class="method-list" aria-label="Constrained local minimization methods">
+              <span class="method-chip">trust-constr</span>
+              <span class="method-chip">SLSQP</span>
+            </div>
             <span class="status">Complete</span>
           </article>
         </section>
@@ -138,9 +149,14 @@
         </div>
         <section class="algorithm-grid" aria-label="Univariate minimizer pages">
           <article class="algorithm-card">
-            <h3>Brent and bounded scalar minimization</h3>
-            <p>Planned page for bracketing, Brent's method, golden-section behavior, and bounded search.</p>
-            <span class="status planned">Planned</span>
+            <h3><a href="topics/univariate-minimizers.html">Brent and bounded scalar minimization</a></h3>
+            <p>Bracketed Brent search, golden-section behavior, and bounded interval minimization for scalar objectives.</p>
+            <div class="method-list" aria-label="Univariate scalar minimizer methods">
+              <span class="method-chip">brent</span>
+              <span class="method-chip">golden</span>
+              <span class="method-chip">bounded</span>
+            </div>
+            <span class="status">Complete</span>
           </article>
         </section>
       </section>
@@ -156,9 +172,16 @@
         </div>
         <section class="algorithm-grid" aria-label="Root finding pages">
           <article class="algorithm-card">
-            <h3>Scalar and system root solvers</h3>
-            <p>Planned page for bracketing, Newton/secant updates, fixed points, and large-system preconditioning.</p>
-            <span class="status planned">Planned</span>
+            <h3><a href="topics/root-finding.html">Scalar and system root solvers</a></h3>
+            <p>Bracketing, Newton updates, fixed points, nonlinear systems, and Krylov preconditioning.</p>
+            <div class="method-list" aria-label="Root finding methods">
+              <span class="method-chip">brentq</span>
+              <span class="method-chip">newton</span>
+              <span class="method-chip">fixed_point</span>
+              <span class="method-chip">root</span>
+              <span class="method-chip">krylov</span>
+            </div>
+            <span class="status">Complete</span>
           </article>
         </section>
       </section>
@@ -174,9 +197,37 @@
         </div>
         <section class="algorithm-grid" aria-label="Structured optimization pages">
           <article class="algorithm-card">
-            <h3>Linear programming and assignment</h3>
-            <p>Planned pages for <code>linprog</code>, linear sum assignment, and mixed-integer models.</p>
-            <span class="status planned">Planned</span>
+            <h3><a href="topics/structured-optimization.html">Linear programming and assignment</a></h3>
+            <p>Linear programs, assignment cost matrices, and mixed-integer knapsack models.</p>
+            <div class="method-list" aria-label="Structured optimization methods">
+              <span class="method-chip">linprog</span>
+              <span class="method-chip">linear_sum_assignment</span>
+              <span class="method-chip">milp</span>
+            </div>
+            <span class="status">Complete</span>
+          </article>
+        </section>
+      </section>
+
+      <section class="category-section" id="advanced">
+        <div class="category-header">
+          <p class="category-kicker">interfaces and execution</p>
+          <h2>Custom minimizers and parallel execution</h2>
+          <p>
+            Advanced tutorial sections that show how to plug in custom solver
+            callables and how to parallelize independent objective evaluations.
+          </p>
+        </div>
+        <section class="algorithm-grid" aria-label="Advanced optimizer interface pages">
+          <article class="algorithm-card">
+            <h3><a href="topics/advanced-usage.html">Custom methods and workers</a></h3>
+            <p>Callable minimizer contracts, OptimizeResult outputs, finite-difference batches, and workers map-like execution.</p>
+            <div class="method-list" aria-label="Advanced optimizer interface features">
+              <span class="method-chip">custom method</span>
+              <span class="method-chip">OptimizeResult</span>
+              <span class="method-chip">workers</span>
+            </div>
+            <span class="status">Complete</span>
           </article>
         </section>
       </section>
@@ -192,8 +243,13 @@ conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_newt
 conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_trust_ncg_visuals.py
 conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_trust_krylov_visuals.py
 conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_trust_exact_visuals.py
+conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_constrained_visuals.py
 conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_global_optimization_visuals.py
-conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_least_squares_visuals.py</code></pre>
+conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_least_squares_visuals.py
+conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_univariate_visuals.py
+conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_root_finding_visuals.py
+conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_structured_optimization_visuals.py
+conda run -n aviation env MPLCONFIGDIR=./.mplconfig python scripts/generate_advanced_usage_visuals.py</code></pre>
     </main>
   </body>
 </html>

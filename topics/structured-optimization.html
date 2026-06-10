@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Linear and Combinatorial Optimization</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script>
+      window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page">
+        <p class="kicker">Structured linear and discrete models</p>
+        <h1>Linear and combinatorial optimization</h1>
+        <p class="lede">
+          Some problems are not best treated as smooth nonlinear objectives.
+          Linear programs, assignment problems, and mixed-integer models expose
+          algebraic structure that specialized solvers can exploit directly.
+        </p>
+        <nav class="nav-row" aria-label="Page navigation">
+          <a class="pill" href="../index.html">Overview</a>
+          <a class="pill" href="constrained-minimization.html">Constrained</a>
+          <a class="pill" href="global-optimization.html">Global optimization</a>
+          <a class="pill" href="least-squares.html">Least squares</a>
+          <a class="pill" href="univariate-minimizers.html">Univariate</a>
+          <a class="pill" href="root-finding.html">Root finding</a>
+          <a class="pill active" href="structured-optimization.html">Structured</a>
+          <a class="pill" href="advanced-usage.html">Advanced</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page content">
+      <article>
+        <section id="idea">
+          <h2>Core Idea</h2>
+          <p>
+            Structured optimization makes constraints and decision-variable
+            types explicit. For a linear program, SciPy's tutorial uses the
+            standard form
+          </p>
+          <div class="equation-block">
+            \[
+              \begin{aligned}
+                \min_x\quad & c^\mathsf{T}x\\
+                \text{subject to}\quad
+                & A_{ub}x\leq b_{ub},\\
+                & A_{eq}x=b_{eq},\\
+                & \ell\leq x\leq u.
+              \end{aligned}
+            \]
+          </div>
+          <p>
+            Assignment and mixed-integer models add discrete choices. They are
+            still algebraic, but the feasible set is no longer a smooth surface.
+          </p>
+        </section>
+
+        <section id="linprog">
+          <h2>Linear Programming</h2>
+          <p>
+            <code>linprog</code> minimizes a linear objective over linear
+            equality, inequality, and bound constraints. In two dimensions, the
+            feasible set is a polygon; in higher dimensions it is a polytope.
+          </p>
+          <figure>
+            <img src="../assets/structured_linprog_geometry.svg" alt="Linear programming feasible polygon and optimal vertex" />
+            <figcaption>
+              A linear objective reaches its optimum at a vertex of the feasible
+              polytope. SciPy's <code>linprog</code> uses the HiGHS solvers for
+              these models.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="assignment">
+          <h2>Assignment Problems</h2>
+          <p>
+            The linear sum assignment problem chooses one entry from each row
+            without reusing columns:
+          </p>
+          <div class="equation-block">
+            \[
+              \min_X \sum_i\sum_j C_{ij}X_{ij},
+              \qquad
+              X_{ij}\in\{0,1\}.
+            \]
+          </div>
+          <figure>
+            <img src="../assets/structured_assignment_matrix.svg" alt="Medley relay assignment cost matrix with optimal cells highlighted" />
+            <figcaption>
+              The tutorial's medley relay example assigns each swimming style to
+              a different student. The lowest cell in each row is not always a
+              valid global assignment because columns cannot be reused.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="milp">
+          <h2>Mixed-Integer Linear Programming</h2>
+          <p>
+            Mixed-integer linear programming keeps some decision variables
+            integer. The tutorial's knapsack example uses binary variables:
+          </p>
+          <div class="equation-block">
+            \[
+              \max \sum_i v_i x_i
+              \quad
+              \text{subject to}
+              \quad
+              \sum_i s_i x_i\leq C,\qquad x_i\in\{0,1\}.
+            \]
+          </div>
+          <figure>
+            <img src="../assets/structured_milp_knapsack.svg" alt="MILP knapsack selected items and capacity usage" />
+            <figcaption>
+              The binary solution selects whole items. A relaxed linear program
+              could choose fractions, but the MILP result preserves the
+              all-or-nothing decision semantics.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="scipy">
+          <h2>Using SciPy</h2>
+          <p>
+            The APIs are different because the problem structures are different:
+            matrix form for linear programming, a cost matrix for assignment, and
+            integrality flags for MILP.
+          </p>
+          <pre><code>import numpy as np
+from scipy.optimize import Bounds, LinearConstraint, linear_sum_assignment, linprog, milp
+
+# Linear programming: maximize 3*x0 + 2*x1 by minimizing its negative.
+c = np.array([-3.0, -2.0])
+A_ub = np.array([[1.0, 1.0], [2.0, 1.0], [1.0, 0.0], [0.0, 1.0]])
+b_ub = np.array([4.0, 5.0, 3.0, 3.0])
+lp = linprog(c, A_ub=A_ub, b_ub=b_ub, bounds=[(0.0, None), (0.0, None)])
+
+# Assignment: rows are swimming styles, columns are students.
+cost = np.array([[43.5, 45.5, 43.4, 46.5, 46.3],
+                 [47.1, 42.1, 39.1, 44.1, 47.8],
+                 [48.4, 49.6, 42.1, 44.5, 50.4],
+                 [38.2, 36.8, 43.2, 41.2, 37.2]])
+row_ind, col_ind = linear_sum_assignment(cost)
+
+# MILP knapsack: maximize value under capacity, with binary variables.
+sizes = np.array([21, 11, 15, 9, 34, 25, 41, 52])
+values = np.array([22, 12, 16, 10, 35, 26, 42, 53])
+capacity = 100
+milp_result = milp(
+    c=-values,
+    constraints=LinearConstraint(sizes, lb=0, ub=capacity),
+    integrality=np.ones_like(values),
+    bounds=Bounds(0, 1),
+)</code></pre>
+        </section>
+
+        <section id="when">
+          <h2>When To Use It</h2>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th>Use when</th>
+                <th>Modeling habit</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>linprog</code></td>
+                <td>Objective and constraints are linear and variables are continuous.</td>
+                <td>Convert maximization to minimization by negating the objective.</td>
+              </tr>
+              <tr>
+                <td><code>linear_sum_assignment</code></td>
+                <td>You need one-to-one matching with minimum total cost.</td>
+                <td>Put the assignable groups on rows and columns of a cost matrix.</td>
+              </tr>
+              <tr>
+                <td><code>milp</code></td>
+                <td>Some variables must be integer or binary.</td>
+                <td>Use bounds plus <code>integrality</code> to encode discrete decisions.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            Practical habit: model first, solve second. Most structured
+            optimization bugs are sign errors, wrong inequality direction, or
+            forgotten integrality constraints.
+          </div>
+        </section>
+      </article>
+
+      <aside class="toc" aria-label="structured optimization sections">
+        <strong>On this page</strong>
+        <a href="#idea">Core idea</a>
+        <a href="#linprog">Linear programming</a>
+        <a href="#assignment">Assignment</a>
+        <a href="#milp">MILP</a>
+        <a href="#scipy">Using SciPy</a>
+        <a href="#when">When to use it</a>
+      </aside>
+    </main>
+  </body>
+</html>
