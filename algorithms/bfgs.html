@@ -933,12 +933,21 @@
             outputs live in a two-direction subspace, because the latest step gave
             only one new curvature lesson.
           </p>
+          <h3>Build The Compact Update First</h3>
           <p>
-            The exact BFGS correction is the carefully weighted symmetric version
-            of that idea. Before writing it down, build the weights.
+            The standard inverse-BFGS update is easiest to understand in compact
+            form. It has two jobs:
           </p>
+          <ol>
+            <li>
+              Make the old model contribute nothing when the input is \(y_k\).
+            </li>
+            <li>
+              Insert the required answer \(s_k\).
+            </li>
+          </ol>
           <p>
-            First name the one scalar that must be nonzero:
+            First name the scalar curvature measurement:
           </p>
           <div class="equation-block">
             \[
@@ -946,19 +955,19 @@
             \]
           </div>
           <p>
-            This is a scalar dot product, not vector division. It measures whether
-            the gradient change \(y_k\) agrees with the step \(s_k\) in the
-            positive-curvature sense. BFGS needs \(r_k>0\). The reciprocal
+            This is a dot product, not vector division. BFGS needs \(r_k>0\). Its
+            reciprocal is
           </p>
           <div class="equation-block">
             \[
               \rho_k=\frac{1}{r_k}
               =
-              \frac{1}{y_k^\mathsf{T}s_k}
+              \frac{1}{y_k^\mathsf{T}s_k}.
             \]
           </div>
           <p>
-            is just a normalization trick. It makes this useful identity true:
+            The reason for \(\rho_k\) is simple: it makes the measured pair
+            normalize to one.
           </p>
           <div class="equation-block">
             \[
@@ -966,173 +975,22 @@
             \]
           </div>
           <p>
-            Now build the part that cancels the old answer \(q_k=H_k y_k\). If we
-            only cared about canceling \(q_k\), this term would do it:
+            Now build an eraser for the input \(y_k\):
           </p>
           <div class="equation-block">
             \[
-              -\rho_k q_k s_k^\mathsf{T}.
+              E_k=I-\rho_k y_k s_k^\mathsf{T}.
             \]
           </div>
           <p>
-            Check it on the only input we are trying to fix, \(y_k\):
+            This eraser is designed so that \(E_k y_k=0\):
           </p>
           <div class="equation-block">
             \[
             \begin{aligned}
-              \left(-\rho_k q_k s_k^\mathsf{T}\right)y_k
+              E_k y_k
               &=
-              -\rho_k q_k(s_k^\mathsf{T}y_k)\\
-              &=
-              -q_k.
-            \end{aligned}
-            \]
-          </div>
-          <p>
-            Great: it removes the old answer. But this term is usually not
-            symmetric. Its transpose is
-          </p>
-          <div class="equation-block">
-            \[
-              \left(-\rho_k q_k s_k^\mathsf{T}\right)^\mathsf{T}
-              =
-              -\rho_k s_k q_k^\mathsf{T}.
-            \]
-          </div>
-          <p>
-            To keep the inverse-Hessian correction symmetric, BFGS includes both
-            terms as a matched pair:
-          </p>
-          <div class="equation-block">
-            \[
-              -\rho_k
-              \left(q_ks_k^\mathsf{T}+s_kq_k^\mathsf{T}\right).
-            \]
-          </div>
-          <p>
-            Now apply the matched pair to \(y_k\):
-          </p>
-          <div class="equation-block">
-            \[
-            \begin{aligned}
-              &-\rho_k
-              \left(q_ks_k^\mathsf{T}+s_kq_k^\mathsf{T}\right)y_k\\
-              &\quad=
-              -\rho_k q_k(s_k^\mathsf{T}y_k)
-              -\rho_k s_k(q_k^\mathsf{T}y_k)\\
-              &\quad=
-              -q_k
-              -\rho_k(q_k^\mathsf{T}y_k)s_k.
-            \end{aligned}
-            \]
-          </div>
-          <p>
-            The first part, \(-q_k\), is exactly what we wanted. The second part is
-            the cost of preserving symmetry: the transpose term also subtracts an
-            extra amount in the \(s_k\) direction. BFGS now has to insert \(s_k\)
-            and repair that extra subtraction.
-          </p>
-          <p>
-            That is why the remaining term points in the \(s_k\) direction:
-          </p>
-          <div class="equation-block">
-            \[
-              A_k s_k s_k^\mathsf{T}.
-            \]
-          </div>
-          <p>
-            When this term acts on \(y_k\), it contributes
-          </p>
-          <div class="equation-block">
-            \[
-              A_k s_k(s_k^\mathsf{T}y_k).
-            \]
-          </div>
-          <p>
-            We choose \(A_k\) so that the total \(s_k\)-amount becomes exactly one
-            copy of \(s_k\):
-          </p>
-          <div class="equation-block">
-            \[
-            \begin{aligned}
-              A_k(s_k^\mathsf{T}y_k)
-              -\rho_k(q_k^\mathsf{T}y_k)
-              &=1,\\
-              A_k
-              &=
-              \rho_k+\rho_k^2y_k^\mathsf{T}q_k.
-            \end{aligned}
-            \]
-          </div>
-          <p>
-            So \(\rho_k\) is the scalar that makes the dot product normalize to
-            one, and \(A_k\) is the repair-and-insert weight for the \(s_k\)
-            direction. With those meanings in place, the correction is
-          </p>
-          <div class="equation-block">
-            \[
-            \begin{aligned}
-              \Delta_k
-              &=
-              A_k s_k s_k^\mathsf{T}\\
-              &\quad
-              -\rho_k s_k q_k^\mathsf{T}\\
-              &\quad
-              -\rho_k q_k s_k^\mathsf{T}.
-            \end{aligned}
-            \]
-          </div>
-          <p>
-            Now the formula has a job you can read. The first term points in the
-            \(s_k\) direction. The last two terms are paired transposes:
-            \(s_kq_k^\mathsf{T}\) and \(q_ks_k^\mathsf{T}\). That paired structure
-            is what keeps the correction symmetric. The constants are the weights
-            that make the corrected matrix satisfy \(H_{k+1}y_k=s_k\) while staying
-            close to \(H_k\).
-          </p>
-          <h3>The Same Update In Compact Form</h3>
-          <p>
-            Textbooks usually write the same update in the compact form below:
-          </p>
-          <div class="equation-block">
-            \[
-            \begin{aligned}
-              \rho_k &= \frac{1}{y_k^\mathsf{T}s_k},\\
-              H_{k+1}
-              &=
-              (I-\rho_k s_k y_k^\mathsf{T})
-              H_k
-              (I-\rho_k y_k s_k^\mathsf{T})\\
-              &\quad+
-              \rho_k s_k s_k^\mathsf{T}.
-            \end{aligned}
-            \]
-          </div>
-          <p>
-            This is the version most code uses. Read it as three actions:
-          </p>
-          <ol>
-            <li>
-              \(\rho_k\) normalizes the measured pair so
-              \(\rho_k y_k^\mathsf{T}s_k=1\).
-            </li>
-            <li>
-              The sandwiched old matrix keeps as much of \(H_k\) as possible, but
-              when the input is \(y_k\), the right factor sends that input to zero.
-            </li>
-            <li>
-              The final term \(\rho_k s_k s_k^\mathsf{T}\) inserts the required
-              answer \(s_k\).
-            </li>
-          </ol>
-          <p>
-            Now verify that last claim slowly. First apply the right factor to
-            \(y_k\):
-          </p>
-          <div class="equation-block">
-            \[
-            \begin{aligned}
-              (I-\rho_k y_k s_k^\mathsf{T})y_k
+              (I-\rho_k y_k s_k^\mathsf{T})y_k\\
               &=
               y_k-\rho_k y_k(s_k^\mathsf{T}y_k)\\
               &=
@@ -1143,20 +1001,34 @@
             \]
           </div>
           <p>
-            Because that factor produces zero, the whole sandwiched old-model part
-            produces zero:
+            Put that eraser on the right side of the old matrix. Then the old
+            matrix cannot return its old answer \(q_k=H_k y_k\), because it receives
+            zero instead of \(y_k\):
           </p>
           <div class="equation-block">
             \[
-              (I-\rho_k s_k y_k^\mathsf{T})
-              H_k
-              (I-\rho_k y_k s_k^\mathsf{T})y_k
-              =
-              0.
+              H_k E_k y_k=H_k0=0.
             \]
           </div>
           <p>
-            The only remaining part is the inserted term:
+            To keep symmetry, BFGS does not use \(H_kE_k\) alone. It sandwiches
+            \(H_k\) between the eraser and its transpose:
+          </p>
+          <div class="equation-block">
+            \[
+              E_k^\mathsf{T}H_kE_k.
+            \]
+          </div>
+          <p>
+            That old-model part still contributes zero on the input \(y_k\):
+          </p>
+          <div class="equation-block">
+            \[
+              E_k^\mathsf{T}H_kE_k y_k=0.
+            \]
+          </div>
+          <p>
+            Now insert the answer BFGS actually wants:
           </p>
           <div class="equation-block">
             \[
@@ -1170,19 +1042,68 @@
             \]
           </div>
           <p>
-            So, for the specific input \(y_k\), the new matrix gives exactly the
-            measured step:
+            Combine the erased old-model part and the inserted answer:
+          </p>
+          <div class="equation-block">
+            \[
+              H_{k+1}
+              =
+              E_k^\mathsf{T}H_kE_k
+              +
+              \rho_k s_k s_k^\mathsf{T}.
+            \]
+          </div>
+          <p>
+            Substitute \(E_k=I-\rho_k y_k s_k^\mathsf{T}\), and you get the usual
+            textbook form:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              H_{k+1}
+              &=
+              (I-\rho_k s_k y_k^\mathsf{T})
+              H_k
+              (I-\rho_k y_k s_k^\mathsf{T})\\
+              &\quad+
+              \rho_k s_k s_k^\mathsf{T}.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            Now the formula has a readable job: erase the old answer on \(y_k\),
+            then insert \(s_k\). Therefore
           </p>
           <div class="equation-block">
             \[
               H_{k+1}y_k=s_k.
             \]
           </div>
+          <h3>Where The Rank-Two Name Comes From</h3>
           <p>
-            This is the secant condition. The formula is doing exactly the job we
-            wanted: replacing the old answer \(q_k=H_k y_k\) with the measured
-            answer \(s_k\), while keeping the matrix symmetric and close to the old
-            model.
+            The compact form hides the rank-two structure. To see the name, expand
+            the change \(H_{k+1}-H_k\) and use \(q_k=H_ky_k\). The correction has
+            this shape:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              H_{k+1}-H_k
+              &=
+              (\text{some scalar})s_ks_k^\mathsf{T}\\
+              &\quad
+              -\rho_k s_kq_k^\mathsf{T}\\
+              &\quad
+              -\rho_k q_ks_k^\mathsf{T}.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            Every term outputs a multiple of either \(s_k\) or \(q_k\). So for any
+            input \(v\), the correction can only return a combination of those two
+            vectors. That is the practical meaning of rank two here: the update
+            changes the old matrix through a two-direction correction, not through
+            a full relearning of all \(n^2\) entries.
           </p>
           <h3>Why The Curvature Sign Matters</h3>
           <p>
