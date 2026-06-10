@@ -220,6 +220,15 @@
             sampling the original Rosenbrock function along one straight line in
             parameter space.
           </p>
+          <figure>
+            <img src="../assets/bfgs_line_search.svg" alt="Python-generated plot of phi alpha along one BFGS search direction" />
+            <figcaption>
+              The blue curve is \(\phi(\alpha)=f(x_k+\alpha p_k)\): the original
+              two-dimensional Rosenbrock objective restricted to this one search
+              line. The x-axis is the scalar step length \(\alpha\); the y-axis is
+              the objective value after taking that step.
+            </figcaption>
+          </figure>
           <h3>Is \(\phi(\alpha)\) Just \(f\) With A Different Variable?</h3>
           <p>
             Not quite. The original objective \(f\) still takes the full parameter
@@ -424,6 +433,46 @@
             Wolfe conditions, to avoid accepting a step that is technically lower
             but still poorly placed along the line.
           </p>
+          <h3>The Search Method Used Here</h3>
+          <p>
+            The generated BFGS example uses backtracking line search. It starts
+            with a full step \(\alpha=1\). If that step fails Armijo, it shrinks
+            the step by a fixed factor \(\beta=0.5\), then tries again:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \alpha &\leftarrow 1,\\
+              \text{while }\phi(\alpha)
+              &>
+              \phi(0)+c_1\alpha\phi'(0):\\
+              \alpha &\leftarrow 0.5\alpha.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            This is not binary search. Binary search keeps a lower and upper
+            bracket and repeatedly tests the midpoint. Backtracking has no such
+            bracket here; it simply says, "the current step is too large, so make
+            it smaller by the same multiplier."
+          </p>
+          <figure>
+            <img src="../assets/bfgs_armijo_backtracking.svg" alt="Python-generated Armijo backtracking decision table" />
+            <figcaption>
+              For this search line, \(\alpha=1\) fails Armijo, \(\alpha=0.5\)
+              still fails, and \(\alpha=0.25\) passes. The accepted step is not
+              necessarily the exact minimizer of \(\phi\); it is the first tested
+              step that gives sufficient decrease.
+            </figcaption>
+          </figure>
+          <p>
+            Numerically, the objective starts at about \(1.924\). Trying
+            \(\alpha=1\) raises it to about \(4.175\), so that trial is rejected.
+            Trying \(\alpha=0.5\) still lands above the starting value, around
+            \(1.984\). Trying \(\alpha=0.25\) lowers the objective to about
+            \(1.822\), so the step is accepted and BFGS can form the curvature
+            pair \(s_k=x_{k+1}-x_k\) and \(y_k=g_{k+1}-g_k\).
+          </p>
           <h3>Can We Optimize \(\alpha\) Directly?</h3>
           <p>
             Yes, in principle. Since \(\alpha\) is scalar, an exact line search
@@ -453,23 +502,6 @@
             small, and produces trustworthy curvature information for the next
             update. Armijo and Wolfe-style inexact line searches target exactly
             that cheaper, algorithm-level goal.
-          </p>
-          <figure>
-            <img src="../assets/bfgs_line_search.svg" alt="Python-generated line-search plot along a BFGS direction" />
-            <figcaption>
-              The generated example uses one BFGS direction on the Rosenbrock
-              function. A full step \(\alpha=1\) overshoots, \(\alpha=0.5\) is
-              still not good enough, and \(\alpha=0.25\) gives a clear decrease,
-              so the backtracking line search accepts it.
-            </figcaption>
-          </figure>
-          <p>
-            In this generated trace, the objective starts at about \(1.924\).
-            Trying \(\alpha=1\) raises it to about \(4.175\), so that trial is
-            rejected. Trying \(\alpha=0.5\) still lands above the starting value,
-            around \(1.984\). Trying \(\alpha=0.25\) lowers the objective to about
-            \(1.822\), so the step is accepted and BFGS can form the curvature
-            pair \(s_k=x_{k+1}-x_k\) and \(y_k=g_{k+1}-g_k\).
           </p>
           <div class="callout">
             Practical connection: line search is not just a safety brake. For

@@ -308,7 +308,7 @@ def plot_line_search_svg() -> None:
 
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
   <title id="title">BFGS line search visualization</title>
-  <desc id="desc">A Python-generated chart of the Rosenbrock objective along one BFGS search direction, showing rejected step lengths and the accepted step length.</desc>
+  <desc id="desc">A Python-generated chart of phi alpha, the Rosenbrock objective restricted to one BFGS search line, showing rejected step lengths and the accepted step length.</desc>
   <defs>
     <style>
       .title {{ font: 700 25px Inter, Arial, sans-serif; fill: #172033; }}
@@ -319,8 +319,8 @@ def plot_line_search_svg() -> None:
     </style>
   </defs>
   <rect width="960" height="520" fill="#ffffff"/>
-  <text x="36" y="48" class="title">Line search chooses how far to trust the direction</text>
-  <text x="36" y="78" class="body">For one BFGS direction, plot phi(alpha) = f(x_k + alpha p_k). The direction is downhill at alpha=0, but a full step can overshoot.</text>
+  <text x="36" y="48" class="title">The curve is phi(alpha), not the full 2D surface</text>
+  <text x="36" y="78" class="body">Freeze x_k and p_k. As alpha moves, f is evaluated only on the line x_k + alpha p_k.</text>
 
   <rect x="48" y="105" width="864" height="352" rx="8" fill="#f8fafc" stroke="#d9e1ea"/>
   <line x1="{plot_x:.1f}" y1="{plot_y:.1f}" x2="{plot_x + plot_w:.1f}" y2="{plot_y:.1f}" stroke="#172033" stroke-width="1.5"/>
@@ -330,16 +330,94 @@ def plot_line_search_svg() -> None:
   <polyline points="{curve_points}" fill="none" stroke="#2563eb" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
   <circle cx="{sx(0):.1f}" cy="{current_y:.1f}" r="6" fill="#172033"/>
   <text x="{sx(0) + 10:.1f}" y="{current_y - 10:.1f}" class="label" fill="#172033">current f(x_k)</text>
+  <text x="222" y="342" class="label" fill="#2563eb">blue curve: phi(alpha)</text>
+  <text x="588" y="{current_y - 9:.1f}" class="label" fill="#b45309">Armijo bound</text>
   {"".join(candidate_marks)}
   {"".join(tick_labels)}
   <text x="{plot_x + plot_w / 2:.1f}" y="448" text-anchor="middle" class="axis">step length alpha</text>
-  <text x="44" y="250" text-anchor="middle" transform="rotate(-90 44 250)" class="axis">objective along the search line</text>
-  <text x="590" y="138" class="small">Backtracking example: try 1, then 0.5, then accept {accepted_alpha:g}.</text>
-  <text x="590" y="158" class="small">Dashed amber line: sufficient-decrease threshold.</text>
+  <text x="44" y="250" text-anchor="middle" transform="rotate(-90 44 250)" class="axis">phi(alpha) = f(x_k + alpha p_k)</text>
+  <text x="590" y="138" class="small">Backtracking example: alpha = 1, 0.5, then {accepted_alpha:g}.</text>
+  <text x="590" y="158" class="small">Dashed amber line: Armijo sufficient-decrease bound.</text>
   <text x="590" y="178" class="small">Generated from BFGS iteration {step_index} on Rosenbrock.</text>
 </svg>
 """
     (ASSET_DIR / "bfgs_line_search.svg").write_text(svg, encoding="utf-8")
+
+
+def plot_armijo_backtracking_svg() -> None:
+    history = bfgs_history_plain([-1.2, 1.0])
+    step_index = 6
+    current = history[step_index]
+    x = current["x"]
+    g = current["grad"]
+    h_inv = current["h_inv"]
+    p = scale_vec(mat_vec(h_inv, g), -1.0)
+    phi0 = rosen2_plain(x)
+    slope0 = dot(g, p)
+    c1 = 1e-4
+    beta = 0.5
+    trials = [1.0, 0.5, 0.25]
+
+    rows = []
+    for alpha in trials:
+        phi_alpha = rosen2_plain(add_vec(x, scale_vec(p, alpha)))
+        armijo_bound = phi0 + c1 * alpha * slope0
+        accepted = phi_alpha <= armijo_bound
+        rows.append((alpha, phi_alpha, armijo_bound, accepted))
+
+    row_svg = []
+    y0 = 214
+    for index, (alpha, phi_alpha, armijo_bound, accepted) in enumerate(rows):
+        y = y0 + index * 70
+        color = "#0f766e" if accepted else "#dc2626"
+        decision = "accept" if accepted else "reject"
+        fill = "#ecfdf5" if accepted else "#fef2f2"
+        row_svg.append(
+            f"""
+  <rect x="60" y="{y - 36}" width="840" height="54" rx="8" fill="{fill}" stroke="#d9e1ea"/>
+  <text x="86" y="{y}" class="mono">alpha = {alpha:g}</text>
+  <text x="232" y="{y}" class="mono">phi(alpha) = {phi_alpha:.6f}</text>
+  <text x="482" y="{y}" class="mono">Armijo bound = {armijo_bound:.6f}</text>
+  <text x="774" y="{y}" class="decision" fill="{color}">{decision}</text>
+"""
+        )
+        if index < len(rows) - 1:
+            row_svg.append(
+                f"""
+  <path d="M480 {y + 24} L480 {y + 44}" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="500" y="{y + 42}" class="small">multiply by beta = {beta:g}</text>
+"""
+            )
+
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
+  <title id="title">Armijo backtracking line search decisions</title>
+  <desc id="desc">A Python-generated table showing Armijo sufficient-decrease checks for alpha values 1, 0.5, and 0.25 in one BFGS line search.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="context-stroke"/>
+    </marker>
+    <style>
+      .title {{ font: 700 25px Inter, Arial, sans-serif; fill: #172033; }}
+      .body {{ font: 14px Inter, Arial, sans-serif; fill: #5f6b7a; }}
+      .label {{ font: 700 15px Inter, Arial, sans-serif; fill: #172033; }}
+      .small {{ font: 12px Inter, Arial, sans-serif; fill: #5f6b7a; }}
+      .mono {{ font: 13px SFMono-Regular, Consolas, monospace; fill: #172033; }}
+      .decision {{ font: 700 15px Inter, Arial, sans-serif; }}
+    </style>
+  </defs>
+  <rect width="960" height="520" fill="#ffffff"/>
+  <text x="36" y="48" class="title">Armijo backtracking is a shrink-until-pass test</text>
+  <text x="36" y="78" class="body">This example starts at alpha = 1 and halves alpha until phi(alpha) is below the Armijo sufficient-decrease bound.</text>
+
+  <rect x="52" y="112" width="856" height="78" rx="8" fill="#f8fafc" stroke="#d9e1ea"/>
+  <text x="76" y="142" class="label">Accept when:</text>
+  <text x="184" y="142" class="mono">phi(alpha) &lt;= phi(0) + c1 * alpha * phi'(0)</text>
+  <text x="76" y="168" class="small">Here phi(0) = {phi0:.6f}, phi'(0) = {slope0:.6f}, c1 = {c1:g}. Because phi'(0) is negative, the bound is slightly below phi(0).</text>
+  {"".join(row_svg)}
+  <text x="60" y="454" class="body">This is not binary search: there is no bracketed interval whose midpoint is repeatedly tested. Backtracking only shrinks a too-large trial step.</text>
+</svg>
+"""
+    (ASSET_DIR / "bfgs_armijo_backtracking.svg").write_text(svg, encoding="utf-8")
 
 
 def rosen2(x: np.ndarray) -> float:
@@ -554,6 +632,7 @@ def plot_evaluation_efficiency() -> None:
 def main() -> None:
     plot_secant_update_svg()
     plot_line_search_svg()
+    plot_armijo_backtracking_svg()
     if NUMERIC_IMPORT_ERROR is None:
         plot_bfgs_path()
         plot_evaluation_efficiency()
