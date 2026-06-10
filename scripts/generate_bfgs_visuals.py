@@ -240,6 +240,104 @@ def plot_secant_update_svg() -> None:
     (ASSET_DIR / "bfgs_secant_update.svg").write_text(svg, encoding="utf-8")
 
 
+def plot_rank_two_update_svg() -> None:
+    history = bfgs_history_plain([-1.2, 1.0])
+    step_index = 3
+    current = history[step_index]
+    following = history[step_index + 1]
+
+    s = sub_vec(following["x"], current["x"])
+    y = sub_vec(following["grad"], current["grad"])
+    h_old = current["h_inv"]
+    h_new = following["h_inv"]
+    q = mat_vec(h_old, y)
+    mapped = mat_vec(h_new, y)
+    correction = sub_vec(s, q)
+    secant_error = norm(sub_vec(mapped, s)) / max(norm(s), 1e-12)
+    scale = 85.0 / max(norm(s), norm(q), norm(correction), 1e-12)
+
+    def delta(vector: list[float]) -> tuple[float, float]:
+        return scale * vector[0], -scale * vector[1]
+
+    def endpoint(origin: tuple[float, float], vector: list[float]) -> tuple[float, float]:
+        dx, dy = delta(vector)
+        return origin[0] + dx, origin[1] + dy
+
+    def arrow_from_vector(
+        origin: tuple[float, float],
+        vector: list[float],
+        color: str,
+        label: str,
+        label_dx: float,
+        label_dy: float,
+        dashed: bool = False,
+        width: float = 4.0,
+    ) -> str:
+        end = endpoint(origin, vector)
+        return svg_arrow(
+            origin[0],
+            origin[1],
+            end[0],
+            end[1],
+            color,
+            label,
+            label_dx,
+            label_dy,
+            dashed=dashed,
+            width=width,
+        )
+
+    old_origin = (224.0, 300.0)
+    add_origin = (694.0, 322.0)
+    q_end = endpoint(add_origin, q)
+
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
+  <title id="title">BFGS rank-two update intuition</title>
+  <desc id="desc">A Python-generated diagram showing that the old inverse Hessian maps y to q, while the correction adds s minus q so the updated matrix maps y to s.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1,1 L1,9 L9,5 z" fill="context-stroke"/>
+    </marker>
+    <style>
+      .title {{ font: 700 25px Inter, Arial, sans-serif; fill: #172033; }}
+      .panel-title {{ font: 700 17px Inter, Arial, sans-serif; fill: #172033; }}
+      .body {{ font: 14px Inter, Arial, sans-serif; fill: #5f6b7a; }}
+      .label {{ font: 700 15px Inter, Arial, sans-serif; }}
+      .small {{ font: 12px Inter, Arial, sans-serif; fill: #5f6b7a; }}
+      .formula {{ font: 700 17px SFMono-Regular, Consolas, monospace; fill: #172033; }}
+    </style>
+  </defs>
+  <rect width="960" height="520" fill="#ffffff"/>
+  <text x="36" y="48" class="title">The update fixes one wrong matrix answer</text>
+  <text x="36" y="78" class="body">For the latest gradient change y_k, the old model says q_k = H_k y_k. The secant condition says the answer must be s_k.</text>
+
+  <rect x="42" y="112" width="384" height="320" rx="8" fill="#f8fafc" stroke="#d9e1ea"/>
+  <text x="68" y="148" class="panel-title">Old model</text>
+  <text x="68" y="176" class="body">The old matrix gives the wrong output for y_k.</text>
+  <line x1="76" y1="338" x2="390" y2="338" stroke="#d9e1ea" stroke-width="1"/>
+  <line x1="224" y1="404" x2="224" y2="214" stroke="#d9e1ea" stroke-width="1"/>
+  <circle cx="{old_origin[0]:.1f}" cy="{old_origin[1]:.1f}" r="5" fill="#172033"/>
+  {arrow_from_vector(old_origin, q, "#2563eb", "q_k = H_k y_k", 10, -10)}
+  {arrow_from_vector(old_origin, s, "#0f766e", "wanted s_k", 10, 20, dashed=True, width=3.5)}
+  <text x="68" y="410" class="small">The distance between these arrows is the error the update must fix.</text>
+
+  <rect x="486" y="112" width="432" height="320" rx="8" fill="#f8fafc" stroke="#d9e1ea"/>
+  <text x="512" y="148" class="panel-title">Update as a correction</text>
+  <text x="512" y="176" class="body">New answer = old answer + correction.</text>
+  <text x="512" y="210" class="formula">H_{'{'}k+1{'}'} y_k = q_k + Delta_k y_k = s_k</text>
+  <line x1="528" y1="360" x2="880" y2="360" stroke="#d9e1ea" stroke-width="1"/>
+  <line x1="694" y1="414" x2="694" y2="238" stroke="#d9e1ea" stroke-width="1"/>
+  <circle cx="{add_origin[0]:.1f}" cy="{add_origin[1]:.1f}" r="5" fill="#172033"/>
+  {arrow_from_vector(add_origin, q, "#2563eb", "old q_k", 10, -8)}
+  {svg_arrow(q_end[0], q_end[1], q_end[0] + delta(correction)[0], q_end[1] + delta(correction)[1], "#7c3aed", "Delta_k y_k", -112, -8, dashed=True, width=3.5)}
+  {arrow_from_vector(add_origin, s, "#0f766e", "new s_k", -65, 10)}
+  <text x="512" y="410" class="small">Generated from BFGS iteration {step_index}; relative secant error after update: {secant_error:.1e}.</text>
+</svg>
+"""
+    svg = "\n".join(line.rstrip() for line in svg.splitlines()) + "\n"
+    (ASSET_DIR / "bfgs_rank_two_update.svg").write_text(svg, encoding="utf-8")
+
+
 def plot_line_search_svg() -> None:
     history = bfgs_history_plain([-1.2, 1.0])
     step_index = 6
@@ -503,8 +601,8 @@ def save_figure(fig: plt.Figure, stem: str) -> None:
 
 
 def plot_bfgs_path() -> None:
-    x = np.linspace(-1.45, 1.45, 540)
-    y = np.linspace(-0.25, 1.75, 540)
+    x = np.linspace(-1.8, 1.8, 540)
+    y = np.linspace(-0.7, 2.7, 540)
     xx, yy = np.meshgrid(x, y)
     zz = 100.0 * (yy - xx**2) ** 2 + (1.0 - xx) ** 2
 
@@ -513,7 +611,7 @@ def plot_bfgs_path() -> None:
     grad_norms = np.array([np.linalg.norm(entry["grad"]) for entry in history], dtype=float)
 
     fig, ax = plt.subplots(figsize=(9.2, 6.35))
-    levels = np.geomspace(0.03, 800, 36)
+    levels = np.geomspace(0.1, 900, 34)
     contour = ax.contour(xx, yy, zz, levels=levels, cmap="viridis", linewidths=0.72)
     ax.clabel(contour, contour.levels[::6], inline=True, fontsize=8, fmt="%.2g")
 
@@ -553,12 +651,12 @@ def plot_bfgs_path() -> None:
     ax.set_title("BFGS learns curvature while crossing the Rosenbrock valley")
     ax.set_xlabel("$x_0$")
     ax.set_ylabel("$x_1$")
-    ax.set_xlim(-1.35, 1.32)
-    ax.set_ylim(-0.18, 1.65)
+    ax.set_xlim(-1.55, 1.55)
+    ax.set_ylim(-0.35, 2.45)
     ax.legend(frameon=False, loc="upper right")
     ax.text(
-        -1.31,
-        -0.09,
+        -1.48,
+        -0.22,
         f"{len(points) - 1} BFGS iterations; final gradient norm {grad_norms[-1]:.2e}",
         fontsize=9,
         color="#374151",
@@ -631,6 +729,7 @@ def plot_evaluation_efficiency() -> None:
 
 def main() -> None:
     plot_secant_update_svg()
+    plot_rank_two_update_svg()
     plot_line_search_svg()
     plot_armijo_backtracking_svg()
     if NUMERIC_IMPORT_ERROR is None:

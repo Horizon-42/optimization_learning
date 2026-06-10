@@ -89,8 +89,8 @@ def save_figure(fig: plt.Figure, stem: str) -> None:
 
 
 def plot_simplex_path() -> None:
-    x = np.linspace(-1.8, 1.8, 520)
-    y = np.linspace(-0.7, 2.7, 520)
+    x = np.linspace(-1.8, 1.8, 540)
+    y = np.linspace(-0.7, 2.7, 540)
     xx, yy = np.meshgrid(x, y)
     zz = 100.0 * (yy - xx**2) ** 2 + (1.0 - xx) ** 2
 

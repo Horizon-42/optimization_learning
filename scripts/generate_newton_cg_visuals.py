@@ -84,18 +84,18 @@ def newton_cg_history(x0: np.ndarray) -> tuple[list[np.ndarray], object]:
 
 
 def plot_newton_cg_path() -> None:
-    x = np.linspace(0.48, 1.42, 540)
-    y = np.linspace(0.34, 1.84, 540)
+    x = np.linspace(-1.8, 1.8, 540)
+    y = np.linspace(-0.7, 2.7, 540)
     xx, yy = np.meshgrid(x, y)
     zz = 100.0 * (yy - xx**2) ** 2 + (1.0 - xx) ** 2
 
-    history, result = newton_cg_history(np.array([1.3, 0.7]))
+    history, result = newton_cg_history(np.array([-1.2, 1.0]))
     points = np.array(history)
     values = np.array([rosen2(point) for point in points])
     grad_norms = np.array([np.linalg.norm(rosen2_grad(point)) for point in points])
 
     fig, ax = plt.subplots(figsize=(9.2, 6.35))
-    levels = np.geomspace(1e-5, 260, 38)
+    levels = np.geomspace(0.1, 900, 34)
     contour = ax.contour(xx, yy, zz, levels=levels, cmap="viridis", linewidths=0.72)
     ax.clabel(contour, contour.levels[::6], inline=True, fontsize=8, fmt="%.1g")
 
@@ -120,11 +120,11 @@ def plot_newton_cg_path() -> None:
             ax.arrow(
                 point[0],
                 point[1],
-                0.055 * newton_direction[0],
-                0.055 * newton_direction[1],
-                width=0.0028,
-                head_width=0.018,
-                head_length=0.018,
+                0.13 * newton_direction[0],
+                0.13 * newton_direction[1],
+                width=0.006,
+                head_width=0.045,
+                head_length=0.05,
                 length_includes_head=True,
                 color="#111827",
                 alpha=0.72,
@@ -137,8 +137,8 @@ def plot_newton_cg_path() -> None:
     ax.set_title("Newton-CG follows Hessian-informed directions")
     ax.set_xlabel("$x_0$")
     ax.set_ylabel("$x_1$")
-    ax.set_xlim(0.5, 1.38)
-    ax.set_ylim(0.36, 1.78)
+    ax.set_xlim(-1.55, 1.55)
+    ax.set_ylim(-0.35, 2.45)
     ax.legend(frameon=False, loc="upper right")
     ax.text(
         0.03,

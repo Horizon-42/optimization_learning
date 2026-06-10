@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
+  <title id="title">BFGS rank-two update intuition</title>
+  <desc id="desc">A Python-generated diagram showing that the old inverse Hessian maps y to q, while the correction adds s minus q so the updated matrix maps y to s.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M1,1 L1,9 L9,5 z" fill="context-stroke"/>
+    </marker>
+    <style>
+      .title { font: 700 25px Inter, Arial, sans-serif; fill: #172033; }
+      .panel-title { font: 700 17px Inter, Arial, sans-serif; fill: #172033; }
+      .body { font: 14px Inter, Arial, sans-serif; fill: #5f6b7a; }
+      .label { font: 700 15px Inter, Arial, sans-serif; }
+      .small { font: 12px Inter, Arial, sans-serif; fill: #5f6b7a; }
+      .formula { font: 700 17px SFMono-Regular, Consolas, monospace; fill: #172033; }
+    </style>
+  </defs>
+  <rect width="960" height="520" fill="#ffffff"/>
+  <text x="36" y="48" class="title">The update fixes one wrong matrix answer</text>
+  <text x="36" y="78" class="body">For the latest gradient change y_k, the old model says q_k = H_k y_k. The secant condition says the answer must be s_k.</text>
+
+  <rect x="42" y="112" width="384" height="320" rx="8" fill="#f8fafc" stroke="#d9e1ea"/>
+  <text x="68" y="148" class="panel-title">Old model</text>
+  <text x="68" y="176" class="body">The old matrix gives the wrong output for y_k.</text>
+  <line x1="76" y1="338" x2="390" y2="338" stroke="#d9e1ea" stroke-width="1"/>
+  <line x1="224" y1="404" x2="224" y2="214" stroke="#d9e1ea" stroke-width="1"/>
+  <circle cx="224.0" cy="300.0" r="5" fill="#172033"/>
+
+      <line x1="224.0" y1="300.0" x2="270.0" y2="371.5" stroke="#2563eb" stroke-width="4.0" stroke-linecap="round" marker-end="url(#arrow)"/>
+      <text x="280.0" y="361.5" class="label" fill="#2563eb">q_k = H_k y_k</text>
+
+
+      <line x1="224.0" y1="300.0" x2="242.4" y2="324.9" stroke="#0f766e" stroke-width="3.5" stroke-linecap="round" marker-end="url(#arrow)" stroke-dasharray="9 7"/>
+      <text x="252.4" y="344.9" class="label" fill="#0f766e">wanted s_k</text>
+
+  <text x="68" y="410" class="small">The distance between these arrows is the error the update must fix.</text>
+
+  <rect x="486" y="112" width="432" height="320" rx="8" fill="#f8fafc" stroke="#d9e1ea"/>
+  <text x="512" y="148" class="panel-title">Update as a correction</text>
+  <text x="512" y="176" class="body">New answer = old answer + correction.</text>
+  <text x="512" y="210" class="formula">H_{k+1} y_k = q_k + Delta_k y_k = s_k</text>
+  <line x1="528" y1="360" x2="880" y2="360" stroke="#d9e1ea" stroke-width="1"/>
+  <line x1="694" y1="414" x2="694" y2="238" stroke="#d9e1ea" stroke-width="1"/>
+  <circle cx="694.0" cy="322.0" r="5" fill="#172033"/>
+
+      <line x1="694.0" y1="322.0" x2="740.0" y2="393.5" stroke="#2563eb" stroke-width="4.0" stroke-linecap="round" marker-end="url(#arrow)"/>
+      <text x="750.0" y="385.5" class="label" fill="#2563eb">old q_k</text>
+
+
+      <line x1="740.0" y1="393.5" x2="712.4" y2="346.9" stroke="#7c3aed" stroke-width="3.5" stroke-linecap="round" marker-end="url(#arrow)" stroke-dasharray="9 7"/>
+      <text x="600.4" y="338.9" class="label" fill="#7c3aed">Delta_k y_k</text>
+
+
+      <line x1="694.0" y1="322.0" x2="712.4" y2="346.9" stroke="#0f766e" stroke-width="4.0" stroke-linecap="round" marker-end="url(#arrow)"/>
+      <text x="647.4" y="356.9" class="label" fill="#0f766e">new s_k</text>
+
+  <text x="512" y="410" class="small">Generated from BFGS iteration 3; relative secant error after update: 1.2e-16.</text>
+</svg>

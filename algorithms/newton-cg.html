@@ -134,22 +134,38 @@
         <section id="cg">
           <h2>What CG Is Doing Inside</h2>
           <p>
-            Conjugate gradient is an iterative method for solving linear systems
-            like \(Ap=b\). In Newton-CG, \(A\) is the Hessian \(H_k\) and
-            \(b=-g_k\). The solve is repeated at each outer iteration because the
-            Hessian and gradient change when \(x_k\) changes.
-          </p>
-          <p>
-            A useful way to read the inner solve is:
+            The name "conjugate gradient" can make the method sound like a new
+            optimizer inside the optimizer. For Newton-CG, it is simpler than
+            that. At the current outer point \(x_k\), freeze the gradient and
+            Hessian and look only at the local quadratic model:
           </p>
           <div class="equation-block">
             \[
-              \text{find } p \text{ so that } H_kp \approx -g_k.
+              m_k(p)=f(x_k)+g_k^\mathsf{T}p+\frac{1}{2}p^\mathsf{T}H_kp.
             \]
           </div>
           <p>
-            At a trial step \(p_j\), the residual is the part of the Newton
-            equation that has not been explained yet:
+            CG is the inner routine that tries to find the bottom of this
+            quadratic model without forming \(H_k^{-1}\). If the Hessian is
+            positive definite, the bottom is where the model gradient is zero:
+          </p>
+          <div class="equation-block">
+            \[
+              \nabla m_k(p)=g_k+H_kp=0,
+              \qquad \text{so} \qquad H_kp=-g_k.
+            \]
+          </div>
+          <p>
+            That equation says: find a step \(p\) whose Hessian-scaled effect
+            cancels the gradient. A direct Newton method would solve this system
+            with a matrix factorization. CG instead builds \(p\) a little at a
+            time by asking only for products \(H_kv\).
+          </p>
+
+          <h3>Start With The Residual</h3>
+          <p>
+            Imagine guessing a step \(p_j\). The residual is the amount by which
+            that guess still fails to satisfy the Newton equation:
           </p>
           <div class="equation-block">
             \[
@@ -157,15 +173,25 @@
             \]
           </div>
           <p>
-            If \(r_j=0\), the Newton equation is solved exactly. Usually we do
-            not need that. The outer optimizer only needs a direction good
-            enough to reduce the objective, so the inner CG loop can stop early
-            when the residual is small enough, when a maximum inner iteration
-            budget is reached, or when the local curvature looks unsafe.
+            If \(r_j=0\), the guess solves \(H_kp=-g_k\) exactly. At the usual
+            starting guess \(p_0=0\), the residual is \(r_0=-g_k\). So the first
+            CG direction is just the downhill direction of the quadratic model.
+            After that, the residual has a second meaning: it points toward the
+            part of the quadratic bowl that the current step has not fixed yet.
+          </p>
+
+          <h3>Why Not Follow The Residual Every Time?</h3>
+          <p>
+            Plain steepest descent would repeatedly move in the current residual
+            direction. On a skinny elliptical bowl, that often zig-zags: one step
+            fixes too much of one coordinate, the next step partially undoes it,
+            and progress crawls along the valley.
           </p>
           <p>
-            CG improves the step through search directions that are conjugate
-            with respect to the Hessian:
+            CG keeps a short memory. It starts from the residual, but it adjusts
+            the next search direction so that the new line search does not spoil
+            what earlier line searches already optimized. This is where the word
+            "conjugate" enters.
           </p>
           <div class="equation-block">
             \[
@@ -173,19 +199,76 @@
             \]
           </div>
           <p>
-            In ordinary words, once CG has optimized along one direction, later
-            directions are chosen so they do not undo that progress according to
-            the quadratic model. This is why CG can solve a two-dimensional
-            positive-definite quadratic in at most two exact iterations, and why
-            it can make useful partial progress in much larger dimensions.
+            This is not ordinary perpendicularity. It is perpendicularity in the
+            stretched geometry of the Hessian. On the quadratic model, two
+            \(H_k\)-conjugate directions behave like independent axes: after CG
+            has chosen the best amount to move along \(d_i\), a later move along
+            \(d_j\) does not disturb that earlier best amount.
+          </p>
+
+          <h3>One Inner CG Step</h3>
+          <p>
+            A single inner CG step has a small, repeatable rhythm. Suppose the
+            current approximate Newton step is \(p_j\), the residual is \(r_j\),
+            and the current search direction is \(d_j\).
+          </p>
+          <ol>
+            <li>
+              Ask for one Hessian-vector product \(H_kd_j\). This is the only
+              place where CG needs Hessian information for this inner step.
+            </li>
+            <li>
+              Choose a scalar \(\eta_j\) that minimizes the quadratic model along
+              the line \(p_j+\eta d_j\).
+            </li>
+            <li>
+              Update the approximate Newton step:
+              \(p_{j+1}=p_j+\eta_jd_j\).
+            </li>
+            <li>
+              Update the residual:
+              \(r_{j+1}=r_j-\eta_jH_kd_j\). If this is small, the Newton
+              equation is solved well enough.
+            </li>
+            <li>
+              Blend the new residual with the old direction to make the next
+              direction \(d_{j+1}\), chosen to be \(H_k\)-conjugate to earlier
+              directions.
+            </li>
+          </ol>
+          <p>
+            For a positive-definite quadratic, the line-minimizing step length is
+          </p>
+          <div class="equation-block">
+            \[
+              \eta_j=\frac{r_j^\mathsf{T}r_j}{d_j^\mathsf{T}H_kd_j}.
+            \]
+          </div>
+          <p>
+            You do not need to memorize this fraction first. Its job is more
+            important than its form: it picks the best distance to travel along
+            the current direction on the local quadratic model.
+          </p>
+
+          <h3>Why Newton-CG Stops Early</h3>
+          <p>
+            In exact arithmetic, CG can solve an \(n\)-variable
+            positive-definite quadratic in at most \(n\) inner steps. Newton-CG
+            usually does not wait that long. The outer method only needs a useful
+            descent direction, not a perfect solution of the temporary quadratic
+            model. So the inner loop is commonly stopped when the residual is
+            small enough, when the inner iteration budget is reached, or when the
+            Hessian shows non-positive curvature and the local model is no
+            longer a proper bowl in that direction.
           </p>
           <figure>
             <img src="../assets/newton_cg_inner_cg_model.svg" alt="Conjugate gradient iterates inside a Newton quadratic model" />
             <figcaption>
               The inner CG loop lives in step space. Starting from \(p_0=0\), it
-              walks across the quadratic model toward the Newton step. In large
-              problems, Newton-CG usually stops before an exact solve because an
-              approximate direction is enough for the outer line search.
+              first follows the residual, then bends its later directions so they
+              are conjugate with respect to the Hessian. In large problems,
+              Newton-CG usually stops before an exact solve because an approximate
+              direction is enough for the outer line search.
             </figcaption>
           </figure>
         </section>
@@ -288,10 +371,22 @@
           <figure>
             <img src="../assets/newton_cg_rosenbrock_path.svg" alt="Newton-CG path on Rosenbrock contours" />
             <figcaption>
-              On Rosenbrock contours, Newton-CG follows Hessian-informed
-              directions and lets the line search choose step lengths. The path
-              is shaped by both the local quadratic model and the real objective
-              values checked along each search line.
+              This figure now uses the same Rosenbrock contour window as the
+              BFGS and Nelder-Mead pages. Newton-CG follows Hessian-informed
+              directions from the same classic start used in the BFGS comparison,
+              while the line search checks real objective values along each
+              search line.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="../assets/rosenbrock_progress_comparison.svg" alt="Progress comparison for Newton-CG, BFGS, and Nelder-Mead on Rosenbrock" />
+            <figcaption>
+              The path plot shows where the methods move; this progress plot
+              shows how quickly the best objective value falls. The x-axis is an
+              accepted outer step or simplex update, so it is a convergence-shape
+              comparison rather than a direct timing comparison: Newton-CG spends
+              Hessian-vector products, BFGS spends gradients, and Nelder-Mead
+              spends objective evaluations.
             </figcaption>
           </figure>
           <p>
@@ -419,6 +514,31 @@ print(result.success, result.message)</code></pre>
           </div>
         </section>
 
+        <section id="sources">
+          <h2>Sources And Further Reading</h2>
+          <p>
+            These sources informed the CG and Newton-CG explanations above:
+          </p>
+          <ul>
+            <li>
+              Jonathan Richard Shewchuk,
+              <a href="https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf">An Introduction to the Conjugate Gradient Method Without the Agonizing Pain</a>.
+            </li>
+            <li>
+              Cornell University Computational Optimization Open Textbook,
+              <a href="https://optimization.cbe.cornell.edu/index.php?title=Conjugate_gradient_methods">Conjugate gradient methods</a>.
+            </li>
+            <li>
+              NEOS Guide,
+              <a href="https://neos-guide.org/guide/algorithms/truncated-newton/">Truncated Newton Methods</a>.
+            </li>
+            <li>
+              SciPy documentation,
+              <a href="https://docs.scipy.org/doc/scipy/reference/optimize.minimize-newtoncg.html">minimize(method="Newton-CG")</a>.
+            </li>
+          </ul>
+        </section>
+
         <p class="next-note">
           Continue to <a href="trust-ncg.html">trust-ncg</a>, the trust-region
           cousin of Newton-CG.
@@ -435,6 +555,7 @@ print(result.success, result.message)</code></pre>
         <a href="#rosenbrock">Rosenbrock</a>
         <a href="#scipy">SciPy usage</a>
         <a href="#when">When to use it</a>
+        <a href="#sources">Sources</a>
       </aside>
     </main>
   </body>
