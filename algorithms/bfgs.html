@@ -1037,10 +1037,25 @@
               &=
               \rho_k s_k(s_k^\mathsf{T}y_k)\\
               &=
+              \left[\rho_k(s_k^\mathsf{T}y_k)\right]s_k\\
+              &=
+              \left[
+              \frac{s_k^\mathsf{T}y_k}{y_k^\mathsf{T}s_k}
+              \right]s_k\\
+              &=
+              1s_k\\
+              &=
               s_k.
             \end{aligned}
             \]
           </div>
+          <p>
+            This is not canceling a vector. The product \(s_k^\mathsf{T}y_k\) is a
+            dot product, so it is one scalar number. Because dot products are
+            symmetric for real vectors, \(s_k^\mathsf{T}y_k=y_k^\mathsf{T}s_k\).
+            Since \(\rho_k=1/(y_k^\mathsf{T}s_k)\), the bracketed scalar becomes
+            \(1\). After that, \(1s_k=s_k\).
+          </p>
           <p>
             Combine the erased old-model part and the inserted answer:
           </p>
