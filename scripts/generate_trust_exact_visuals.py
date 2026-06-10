@@ -114,18 +114,18 @@ def trust_exact_history(x0: np.ndarray) -> tuple[list[np.ndarray], object]:
 
 
 def plot_trust_exact_path() -> None:
-    x = np.linspace(0.48, 1.42, 540)
-    y = np.linspace(0.34, 1.84, 540)
+    x = np.linspace(-1.55, 1.55, 540)
+    y = np.linspace(-0.35, 2.45, 540)
     xx, yy = np.meshgrid(x, y)
     zz = 100.0 * (yy - xx**2) ** 2 + (1.0 - xx) ** 2
 
-    history, result = trust_exact_history(np.array([1.3, 0.7]))
+    history, result = trust_exact_history(np.array([-1.2, 1.0]))
     points = np.array(history)
     values = np.array([rosen2(point) for point in points])
     grad_norms = np.array([np.linalg.norm(rosen2_grad(point)) for point in points])
 
     fig, ax = plt.subplots(figsize=(9.2, 6.35))
-    levels = np.geomspace(1e-6, 260, 40)
+    levels = np.geomspace(0.1, 900, 34)
     contour = ax.contour(xx, yy, zz, levels=levels, cmap="viridis", linewidths=0.72)
     ax.clabel(contour, contour.levels[::6], inline=True, fontsize=8, fmt="%.1g")
 
@@ -157,11 +157,11 @@ def plot_trust_exact_path() -> None:
     ax.scatter([1.0], [1.0], marker="*", s=190, color="#f59e0b", edgecolor="#111827", linewidth=0.5, zorder=6, label="global minimum")
     ax.scatter([points[0, 0]], [points[0, 1]], s=70, color="#dc2626", edgecolor="white", linewidth=0.8, zorder=6, label="start")
     ax.scatter([points[-1, 0]], [points[-1, 1]], s=70, color="#16a34a", edgecolor="white", linewidth=0.8, zorder=6, label="trust-exact finish")
-    ax.set_title("trust-exact uses nearly exact dense trust-region steps")
+    ax.set_title("trust-exact on the shared Rosenbrock valley")
     ax.set_xlabel("$x_0$")
     ax.set_ylabel("$x_1$")
-    ax.set_xlim(0.5, 1.38)
-    ax.set_ylim(0.36, 1.78)
+    ax.set_xlim(-1.55, 1.55)
+    ax.set_ylim(-0.35, 2.45)
     ax.legend(frameon=False, loc="lower right")
     ax.text(
         0.03,

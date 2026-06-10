@@ -144,9 +144,17 @@
           <figure>
             <img src="../assets/trust_exact_rosenbrock_path.svg" alt="trust-exact path on Rosenbrock contours" />
             <figcaption>
-              From the same two-dimensional start used by the trust-ncg and
-              trust-krylov pages, trust-exact reaches the Rosenbrock minimum with
-              nearly exact dense trust-region steps.
+              This figure uses the same Rosenbrock contour window and classic
+              start as the other local-minimizer pages. trust-exact reaches the
+              Rosenbrock minimum with nearly exact dense trust-region steps.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="../assets/rosenbrock_progress_comparison.svg" alt="Progress comparison for local minimizers on Rosenbrock" />
+            <figcaption>
+              The shared progress plot compares best objective value after each
+              accepted outer step or simplex update. trust-exact often buys a
+              direct-looking path by spending full Hessian work inside each step.
             </figcaption>
           </figure>
         </section>

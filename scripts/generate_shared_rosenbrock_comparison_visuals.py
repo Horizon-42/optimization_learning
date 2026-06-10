@@ -161,6 +161,181 @@ def newton_cg_history(x0: list[float], max_iter: int = 50) -> list[list[float]]:
     return history
 
 
+def hess_mat_vec(hessian: tuple[float, float, float], vector: list[float]) -> list[float]:
+    h00, h01, h11 = hessian
+    return [h00 * vector[0] + h01 * vector[1], h01 * vector[0] + h11 * vector[1]]
+
+
+def quadratic_step_model(
+    gradient: list[float],
+    hessian: tuple[float, float, float],
+    step: list[float],
+) -> float:
+    return dot(gradient, step) + 0.5 * dot(step, hess_mat_vec(hessian, step))
+
+
+def smallest_eigenvalue_2x2(hessian: tuple[float, float, float]) -> float:
+    h00, h01, h11 = hessian
+    return 0.5 * (h00 + h11 - math.sqrt((h00 - h11) ** 2 + 4.0 * h01 * h01))
+
+
+def step_to_boundary(step: list[float], direction: list[float], radius: float) -> float:
+    a = dot(direction, direction)
+    b = 2.0 * dot(step, direction)
+    c = dot(step, step) - radius * radius
+    discriminant = max(0.0, b * b - 4.0 * a * c)
+    return (-b + math.sqrt(discriminant)) / (2.0 * a)
+
+
+def exact_trust_region_step(
+    gradient: list[float],
+    hessian: tuple[float, float, float],
+    radius: float,
+) -> list[float]:
+    h00, h01, h11 = hessian
+    lower = max(0.0, -smallest_eigenvalue_2x2(hessian) + 1e-10)
+
+    if lower == 0.0:
+        try:
+            newton_step = solve_symmetric_2x2(h00, h01, h11, -gradient[0], -gradient[1])
+            if norm(newton_step) <= radius:
+                return newton_step
+        except ValueError:
+            pass
+
+    def shifted_step(lam: float) -> list[float]:
+        return solve_symmetric_2x2(h00 + lam, h01, h11 + lam, -gradient[0], -gradient[1])
+
+    lo = lower
+    hi = max(1.0, 2.0 * lower + 1.0)
+    while norm(shifted_step(hi)) > radius:
+        hi *= 2.0
+
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if norm(shifted_step(mid)) > radius:
+            lo = mid
+        else:
+            hi = mid
+    return shifted_step(hi)
+
+
+def truncated_cg_step(
+    gradient: list[float],
+    hessian: tuple[float, float, float],
+    radius: float,
+    max_cg_iters: int,
+) -> list[float]:
+    step = [0.0, 0.0]
+    residual = scale_vec(gradient, -1.0)
+    direction = residual[:]
+    residual_norm_sq = dot(residual, residual)
+
+    if math.sqrt(residual_norm_sq) < 1e-12:
+        return step
+
+    for _ in range(max_cg_iters):
+        h_direction = hess_mat_vec(hessian, direction)
+        curvature = dot(direction, h_direction)
+        if curvature <= 0.0:
+            tau = step_to_boundary(step, direction, radius)
+            return add_vec(step, scale_vec(direction, tau))
+
+        alpha = residual_norm_sq / curvature
+        candidate = add_vec(step, scale_vec(direction, alpha))
+        if norm(candidate) >= radius:
+            tau = step_to_boundary(step, direction, radius)
+            return add_vec(step, scale_vec(direction, tau))
+
+        next_residual = sub_vec(residual, scale_vec(h_direction, alpha))
+        next_residual_norm_sq = dot(next_residual, next_residual)
+        step = candidate
+        if math.sqrt(next_residual_norm_sq) < 1e-10:
+            return step
+
+        beta = next_residual_norm_sq / residual_norm_sq
+        direction = add_vec(next_residual, scale_vec(direction, beta))
+        residual = next_residual
+        residual_norm_sq = next_residual_norm_sq
+
+    return step
+
+
+def trust_region_history(
+    x0: list[float],
+    step_rule,
+    initial_radius: float,
+    acceptance_threshold: float = 0.15,
+    max_radius: float = 2.0,
+    max_iter: int = 120,
+) -> list[list[float]]:
+    x = [float(x0[0]), float(x0[1])]
+    radius = initial_radius
+    history = [x[:]]
+
+    for _ in range(max_iter):
+        gradient = rosen2_grad(x)
+        if norm(gradient) < 1e-8:
+            break
+
+        hessian = rosen2_hess_entries(x)
+        step = step_rule(x, gradient, hessian, radius)
+        if norm(step) < 1e-12:
+            step = scale_vec(gradient, -radius / norm(gradient))
+
+        predicted_reduction = -quadratic_step_model(gradient, hessian, step)
+        actual_reduction = rosen2(x) - rosen2(add_vec(x, step))
+        ratio = actual_reduction / predicted_reduction if predicted_reduction > 0.0 else -math.inf
+
+        if ratio > acceptance_threshold and actual_reduction > 0.0:
+            x = add_vec(x, step)
+            history.append(x[:])
+
+        if ratio < 0.25:
+            radius = max(0.25 * radius, 1e-8)
+        elif ratio > 0.75 and norm(step) > 0.8 * radius:
+            radius = min(2.0 * radius, max_radius)
+
+    return history
+
+
+def trust_ncg_history(x0: list[float]) -> list[list[float]]:
+    def step_rule(
+        x: list[float],
+        gradient: list[float],
+        hessian: tuple[float, float, float],
+        radius: float,
+    ) -> list[float]:
+        max_cg_iters = 1 if rosen2(x) > 5.0 else 2
+        return truncated_cg_step(gradient, hessian, radius, max_cg_iters)
+
+    return trust_region_history(x0, step_rule, initial_radius=0.25)
+
+
+def trust_krylov_history(x0: list[float]) -> list[list[float]]:
+    def step_rule(
+        _x: list[float],
+        gradient: list[float],
+        hessian: tuple[float, float, float],
+        radius: float,
+    ) -> list[float]:
+        return truncated_cg_step(gradient, hessian, radius, max_cg_iters=2)
+
+    return trust_region_history(x0, step_rule, initial_radius=0.35, acceptance_threshold=0.1)
+
+
+def trust_exact_history(x0: list[float]) -> list[list[float]]:
+    def step_rule(
+        _x: list[float],
+        gradient: list[float],
+        hessian: tuple[float, float, float],
+        radius: float,
+    ) -> list[float]:
+        return exact_trust_region_step(gradient, hessian, radius)
+
+    return trust_region_history(x0, step_rule, initial_radius=0.75, acceptance_threshold=0.1)
+
+
 def nelder_mead_history(
     initial_simplex: list[list[float]],
     max_iter: int = 95,
@@ -362,7 +537,7 @@ def progress_values_from_simplexes(history: list[list[list[float]]]) -> list[flo
 
 def render_progress_svg(series: list[tuple[str, list[float], str]]) -> None:
     width = 980
-    height = 560
+    height = 690
     plot_x = 84.0
     plot_y = 80.0
     plot_w = 770.0
@@ -411,12 +586,12 @@ def render_progress_svg(series: list[tuple[str, list[float], str]]) -> None:
         legend_y = 106 + index * 28
         legend.append(legend_item(638, legend_y, color, name))
         final_rows.append(
-            f'<text x="626" y="{464 + index * 22}" class="small" fill="{color}">{name}: {len(values) - 1} steps, final best f={values[-1]:.1e}</text>'
+            f'<text x="606" y="{514 + index * 22}" class="small" fill="{color}">{name}: {len(values) - 1} steps, final best f={values[-1]:.1e}</text>'
         )
 
     svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">
   <title id="title">Rosenbrock progress comparison</title>
-  <desc id="desc">A Python-generated log-scale comparison of best Rosenbrock objective value by accepted step for BFGS, Newton-CG, and Nelder-Mead.</desc>
+  <desc id="desc">A Python-generated log-scale comparison of best Rosenbrock objective value by accepted step for Nelder-Mead, BFGS, Newton-CG, trust-ncg, trust-krylov, and trust-exact.</desc>
   <defs>
     <clipPath id="progress-clip">
       <rect x="{plot_x}" y="{plot_y}" width="{plot_w}" height="{plot_h}" />
@@ -439,13 +614,13 @@ def render_progress_svg(series: list[tuple[str, list[float], str]]) -> None:
   </g>
   <text x="{plot_x + plot_w / 2:.2f}" y="{plot_y + plot_h + 54:.2f}" text-anchor="middle" class="axis">accepted outer step / simplex update</text>
   <text x="27" y="{plot_y + plot_h / 2:.2f}" text-anchor="middle" transform="rotate(-90 27 {plot_y + plot_h / 2:.2f})" class="axis">best f(x) so far</text>
-  <rect x="618" y="84" width="230" height="98" rx="8" fill="#ffffff" opacity="0.94" stroke="#d9e1ea" />
+  <rect x="618" y="84" width="230" height="188" rx="8" fill="#ffffff" opacity="0.94" stroke="#d9e1ea" />
   {"".join(legend)}
-  <rect x="610" y="432" width="300" height="88" rx="8" fill="#ffffff" opacity="0.94" stroke="#d9e1ea" />
+  <rect x="588" y="486" width="344" height="156" rx="8" fill="#ffffff" opacity="0.94" stroke="#d9e1ea" />
   {"".join(final_rows)}
-  <text x="86" y="466" class="small">Read this as convergence shape, not a stopwatch.</text>
-  <text x="86" y="489" class="small">Newton-CG spends Hessian-vector products; BFGS spends gradients;</text>
-  <text x="86" y="512" class="small">Nelder-Mead spends only objective evaluations.</text>
+  <text x="86" y="508" class="small">Read this as convergence shape, not a stopwatch.</text>
+  <text x="86" y="531" class="small">Second-order methods spend Hessian or Hessian-vector work;</text>
+  <text x="86" y="554" class="small">BFGS spends gradients; Nelder-Mead spends only objective calls.</text>
 </svg>
 """
     svg = "\n".join(line.rstrip() for line in svg.splitlines()) + "\n"
@@ -530,6 +705,9 @@ def main() -> None:
     start = [-1.2, 1.0]
     bfgs_points = bfgs_history(start)
     newton_points = newton_cg_history(start)
+    trust_ncg_points = trust_ncg_history(start)
+    trust_krylov_points = trust_krylov_history(start)
+    trust_exact_points = trust_exact_history(start)
 
     initial_simplex = [[-1.35, 1.65], [-1.05, 2.25], [-0.55, 1.55]]
     nm_history = nelder_mead_history(initial_simplex)
@@ -539,6 +717,9 @@ def main() -> None:
             ("Newton-CG", progress_values_from_points(newton_points), "#2563eb"),
             ("BFGS", progress_values_from_points(bfgs_points), "#7c3aed"),
             ("Nelder-Mead", progress_values_from_simplexes(nm_history), "#be123c"),
+            ("trust-ncg", progress_values_from_points(trust_ncg_points), "#ea580c"),
+            ("trust-krylov", progress_values_from_points(trust_krylov_points), "#0f766e"),
+            ("trust-exact", progress_values_from_points(trust_exact_points), "#0891b2"),
         ]
     )
 
@@ -569,6 +750,33 @@ def main() -> None:
         "best vertex finish",
         f"{len(nm_history) - 1} simplex iterations; final best f={rosen2(nm_best_points[-1]):.1e}.",
         extra_markup=simplex_markup(nm_history),
+    )
+    render_path_svg(
+        "trust_ncg_rosenbrock_path.svg",
+        "trust-ncg on the shared Rosenbrock valley",
+        "Same contour window and start as the Newton-CG comparison figure.",
+        trust_ncg_points,
+        "#ea580c",
+        "trust-ncg finish",
+        f"{len(trust_ncg_points) - 1} accepted trust-region steps; final f={rosen2(trust_ncg_points[-1]):.1e}.",
+    )
+    render_path_svg(
+        "trust_krylov_rosenbrock_path.svg",
+        "trust-krylov on the shared Rosenbrock valley",
+        "Same contour window and start as the trust-ncg comparison figure.",
+        trust_krylov_points,
+        "#0f766e",
+        "trust-krylov finish",
+        f"{len(trust_krylov_points) - 1} accepted trust-region steps; final f={rosen2(trust_krylov_points[-1]):.1e}.",
+    )
+    render_path_svg(
+        "trust_exact_rosenbrock_path.svg",
+        "trust-exact on the shared Rosenbrock valley",
+        "Same contour window and start as the other local minimizer figures.",
+        trust_exact_points,
+        "#0891b2",
+        "trust-exact finish",
+        f"{len(trust_exact_points) - 1} accepted trust-region steps; final f={rosen2(trust_exact_points[-1]):.1e}.",
     )
 
 

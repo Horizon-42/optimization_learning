@@ -130,9 +130,19 @@
           <figure>
             <img src="../assets/trust_ncg_rosenbrock_path.svg" alt="trust-ncg path on Rosenbrock contours" />
             <figcaption>
-              From the same two-dimensional start used in the Newton-CG page,
-              trust-ncg takes accepted trust-region steps through the curved
-              valley and reaches the minimum in a small number of outer iterations.
+              This figure uses the same Rosenbrock contour window and classic
+              start as the Nelder-Mead, BFGS, and Newton-CG pages. trust-ncg
+              takes accepted trust-region steps through the curved valley and
+              reaches the minimum in a small number of outer iterations.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="../assets/rosenbrock_progress_comparison.svg" alt="Progress comparison for local minimizers on Rosenbrock" />
+            <figcaption>
+              The path plot shows where each method moves; this progress plot
+              compares how quickly the best objective value falls. The x-axis is
+              accepted outer step or simplex update, so it compares convergence
+              shape rather than equal compute cost.
             </figcaption>
           </figure>
         </section>
