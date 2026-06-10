@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
+  <title id="title">BFGS secant update visualization</title>
+  <desc id="desc">A Python-generated diagram showing a step vector, a gradient-change vector, and the BFGS inverse Hessian mapping the gradient change back to the step.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="context-stroke"/>
+    </marker>
+    <style>
+      .title { font: 700 25px Inter, Arial, sans-serif; fill: #172033; }
+      .panel-title { font: 700 17px Inter, Arial, sans-serif; fill: #172033; }
+      .body { font: 14px Inter, Arial, sans-serif; fill: #5f6b7a; }
+      .label { font: 700 15px Inter, Arial, sans-serif; }
+      .small { font: 12px Inter, Arial, sans-serif; fill: #5f6b7a; }
+      .formula { font: 700 18px Inter, Arial, sans-serif; fill: #172033; }
+    </style>
+  </defs>
+  <rect width="960" height="520" fill="#ffffff"/>
+  <text x="36" y="48" class="title">One BFGS update is one curvature lesson</text>
+  <text x="36" y="78" class="body">The step s_k says where the parameters moved. The gradient change y_k says how the slope reacted.</text>
+
+  <rect x="36" y="110" width="412" height="330" rx="8" fill="#f8fafc" stroke="#d9e1ea"/>
+  <text x="62" y="145" class="panel-title">1. Measure what happened</text>
+  <text x="62" y="172" class="body">On this Rosenbrock step, s_k and y_k point in different directions.</text>
+  <line x1="84" y1="335" x2="404" y2="335" stroke="#d9e1ea" stroke-width="1"/>
+  <line x1="225" y1="404" x2="225" y2="206" stroke="#d9e1ea" stroke-width="1"/>
+  <circle cx="225.0" cy="335.0" r="5" fill="#172033"/>
+  
+      <line x1="225.0" y1="335.0" x2="191.9" y2="214.4" stroke="#0f766e" stroke-width="5.0" stroke-linecap="round" marker-end="url(#arrow)"/>
+      <text x="200.9" y="206.4" class="label" fill="#0f766e">s_k</text>
+    
+  
+      <line x1="225.0" y1="335.0" x2="303.6" y2="251.1" stroke="#b45309" stroke-width="5.0" stroke-linecap="round" marker-end="url(#arrow)" stroke-dasharray="9 7"/>
+      <text x="312.6" y="269.1" class="label" fill="#b45309">y_k</text>
+    
+  <text x="62" y="414" class="small">Angle between s_k and y_k: 58 degrees. The y_k arrow is scaled to fit.</text>
+
+  <rect x="512" y="110" width="412" height="330" rx="8" fill="#f8fafc" stroke="#d9e1ea"/>
+  <text x="538" y="145" class="panel-title">2. Store the lesson in H</text>
+  <text x="538" y="172" class="body">After the rank-two update, the new inverse-Hessian</text>
+  <text x="538" y="192" class="body">model remembers one measured direction:</text>
+  <text x="538" y="226" class="formula">H_{k+1} y_k = s_k</text>
+  <line x1="550" y1="360" x2="886" y2="360" stroke="#d9e1ea" stroke-width="1"/>
+  <line x1="705" y1="414" x2="705" y2="238" stroke="#d9e1ea" stroke-width="1"/>
+  <circle cx="705.0" cy="360.0" r="5" fill="#172033"/>
+  
+      <line x1="705.0" y1="360.0" x2="767.9" y2="292.9" stroke="#b45309" stroke-width="4.0" stroke-linecap="round" marker-end="url(#arrow)" stroke-dasharray="9 7"/>
+      <text x="778.9" y="310.9" class="label" fill="#b45309">input y_k</text>
+    
+  
+      <line x1="705.0" y1="368.0" x2="676.4" y2="263.8" stroke="#2563eb" stroke-width="4.0" stroke-linecap="round" marker-end="url(#arrow)" stroke-dasharray="9 7"/>
+      <text x="596.4" y="253.8" class="label" fill="#2563eb">H y_k</text>
+    
+  
+      <line x1="705.0" y1="360.0" x2="676.4" y2="255.8" stroke="#0f766e" stroke-width="5.0" stroke-linecap="round" marker-end="url(#arrow)"/>
+      <text x="687.4" y="271.8" class="label" fill="#0f766e">s_k</text>
+    
+  <text x="538" y="414" class="small">Relative secant error in this generated trace: 2.7e-15.</text>
+</svg>

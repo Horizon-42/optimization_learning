@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>BFGS Quasi-Newton Algorithm</title>
+    <title>BFGS Quasi-Newton Tutorial</title>
     <link rel="stylesheet" href="../styles.css" />
     <script>
       window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
@@ -14,11 +14,12 @@
     <header class="site-header">
       <div class="page">
         <p class="kicker">Gradient-based local minimization</p>
-        <h1>Broyden-Fletcher-Goldfarb-Shanno algorithm</h1>
+        <h1>BFGS quasi-Newton tutorial</h1>
         <p class="lede">
-          BFGS is the classic quasi-Newton workhorse. It uses gradients to infer
-          local curvature, then turns that curvature model into smarter search
-          directions without forming the true Hessian.
+          BFGS makes the most sense after Newton's method. This tutorial first
+          builds Newton's curvature idea, then shows how BFGS keeps the useful
+          Newton behavior while learning curvature from gradients instead of
+          forming the true Hessian.
         </p>
         <nav class="nav-row" aria-label="Page navigation">
           <a class="pill" href="../index.html">Overview</a>
@@ -34,153 +35,297 @@
 
     <main class="page content">
       <article>
-        <section id="idea">
-          <h2>Core Idea</h2>
+        <section id="gradient">
+          <h2>Start With Gradient Descent</h2>
           <p>
-            Newton's method would step with the inverse Hessian:
+            Suppose you want to minimize a smooth function \(f(x)\). The gradient
+            \(g_k=\nabla f(x_k)\) tells you which direction increases the function
+            fastest, so \(-g_k\) points downhill. That sounds enough until the
+            level curves are long and skinny. Then steepest descent often bounces
+            across the valley: every step is downhill, but many of them point
+            sideways more than forward.
           </p>
-          <div class="equation-block">
-            \[
-              x_{k+1}=x_k-\alpha_k \nabla^2 f(x_k)^{-1}\nabla f(x_k).
-            \]
-          </div>
           <p>
-            BFGS keeps the Newton shape but replaces the true inverse Hessian with
-            an approximation \(H_k\). The search direction is
-            \(p_k=-H_k\nabla f(x_k)\), and a line search chooses the step length
-            \(\alpha_k\).
-          </p>
-          <div class="equation-block">
-            \[
-              x_{k+1}=x_k+\alpha_k p_k,
-              \qquad p_k=-H_k g_k,
-              \qquad g_k=\nabla f(x_k).
-            \]
-          </div>
-        </section>
-
-        <section id="update">
-          <h2>The BFGS Update</h2>
-          <p>
-            After one step, BFGS compares the displacement in parameter space with
-            the displacement in gradient space:
-          </p>
-          <div class="equation-block">
-            \[
-              s_k=x_{k+1}-x_k,
-              \qquad
-              y_k=g_{k+1}-g_k,
-              \qquad
-              \rho_k=\frac{1}{y_k^\mathsf{T}s_k}.
-            \]
-          </div>
-          <p>
-            The inverse-Hessian approximation is then updated by the rank-two
-            formula
-          </p>
-          <div class="equation-block">
-            \[
-              H_{k+1}
-              =
-              (I-\rho_k s_k y_k^\mathsf{T})H_k(I-\rho_k y_k s_k^\mathsf{T})
-              + \rho_k s_k s_k^\mathsf{T}.
-            \]
-          </div>
-          <p>
-            This update satisfies the secant condition \(H_{k+1}y_k=s_k\). When
-            \(y_k^\mathsf{T}s_k>0\), it also preserves a positive-definite
-            \(H_k\), so the search direction remains downhill.
+            The missing ingredient is curvature. A gradient tells you the local
+            slope at one point, but it does not tell you whether the surface is
+            steep like a wall in one direction and flat like a valley floor in
+            another. Newton's method is the classic way to use that second piece
+            of information.
           </p>
         </section>
 
-        <section id="rosenbrock">
-          <h2>Rosenbrock Example</h2>
+        <section id="newton">
+          <h2>Newton's Method First</h2>
           <p>
-            For the \(N\)-variable Rosenbrock function
+            Newton's method starts by replacing the objective near \(x_k\) with a
+            local quadratic model. In multiple variables, that model is built from
+            the current value, the gradient, and the Hessian matrix
+            \(B_k=\nabla^2 f(x_k)\):
           </p>
           <div class="equation-block">
             \[
-              f(x)=\sum_{i=0}^{N-2}100(x_{i+1}-x_i^2)^2+(1-x_i)^2,
+              m_k(p)=f(x_k)+g_k^\mathsf{T}p+\frac{1}{2}p^\mathsf{T}B_kp.
             \]
           </div>
           <p>
-            the interior gradient terms are
+            Here \(p\) means "the step away from the current point." To minimize
+            this quadratic model, differentiate it with respect to \(p\) and set
+            that derivative to zero:
           </p>
           <div class="equation-block">
             \[
-              \frac{\partial f}{\partial x_j}
-              =
-              200(x_j-x_{j-1}^2)
-              -400x_j(x_{j+1}-x_j^2)
-              -2(1-x_j).
+              \nabla_p m_k(p)=g_k+B_kp=0
+              \quad\Longrightarrow\quad
+              B_kp_k=-g_k.
             \]
           </div>
           <p>
-            The endpoint derivatives are
+            If \(B_k\) is positive definite, this step points to the minimum of
+            the local quadratic model. Written with an inverse, the Newton
+            direction is
+          </p>
+          <div class="equation-block">
+            \[
+              p_\text{Newton}=-B_k^{-1}g_k
+              =-\nabla^2 f(x_k)^{-1}g_k.
+            \]
+          </div>
+          <p>
+            This is the important idea: Newton rescales the gradient by curvature.
+            Directions with high curvature get shorter steps; directions with low
+            curvature can get longer steps. A line search may still choose
+            \(x_{k+1}=x_k+\alpha_k p_k\) instead of taking the full step, because
+            the quadratic model is only a local approximation.
+          </p>
+          <p>
+            Newton's method is powerful, but it asks for a lot. You need Hessian
+            information, you need to solve a linear system, and the Hessian can be
+            expensive, dense, or indefinite. BFGS exists for the common situation
+            where you want Newton-like curvature correction, but you only want to
+            provide function values and gradients.
+          </p>
+        </section>
+
+        <section id="bfgs-bridge">
+          <h2>From Newton To BFGS</h2>
+          <p>
+            BFGS keeps Newton's shape and swaps out the expensive part. Instead of
+            computing the true inverse Hessian \(B_k^{-1}\), it maintains an
+            approximation \(H_k\):
+          </p>
+          <div class="equation-block">
+            \[
+              p_k=-H_k g_k,
+              \qquad
+              x_{k+1}=x_k+\alpha_k p_k.
+            \]
+          </div>
+          <p>
+            At the beginning, \(H_k\) is often just the identity matrix, so the
+            first direction behaves like steepest descent. After each accepted
+            step, BFGS updates \(H_k\) so it better imitates the inverse Hessian
+            near the path the optimizer has actually traveled.
+          </p>
+          <div class="callout">
+            Mental model: BFGS is gradient descent with a memory. At first
+            it may know almost nothing about curvature. Each successful step adds
+            one measured relationship between movement and gradient change, and
+            that relationship reshapes the next search direction.
+          </div>
+        </section>
+
+        <section id="iteration">
+          <h2>One Iteration, Slowly</h2>
+          <p>
+            A BFGS iteration has two jobs. First it must find a safe downhill
+            point. Then it must learn something about curvature from the movement
+            it just made.
+          </p>
+          <ol>
+            <li>
+              Start at \(x_k\) and evaluate the gradient \(g_k=\nabla f(x_k)\).
+            </li>
+            <li>
+              Turn the gradient into a search direction with the current
+              inverse-Hessian estimate: \(p_k=-H_k g_k\).
+            </li>
+            <li>
+              Use a line search to choose a step length \(\alpha_k\). The line
+              search prevents the curvature model from taking an impressive but
+              reckless full step.
+            </li>
+            <li>
+              Move to \(x_{k+1}=x_k+\alpha_k p_k\), then evaluate
+              \(g_{k+1}\).
+            </li>
+            <li>
+              Compare what changed in the parameters with what changed in the
+              gradient:
+              \(s_k=x_{k+1}-x_k\) and \(y_k=g_{k+1}-g_k\).
+            </li>
+          </ol>
+          <p>
+            The pair \((s_k,y_k)\) is the new information. It says: "when I moved
+            by \(s_k\), the gradient changed by \(y_k\)." BFGS turns that single
+            observation into an updated matrix \(H_{k+1}\).
+          </p>
+        </section>
+
+        <section id="secant">
+          <h2>The Curvature Lesson</h2>
+          <p>
+            The key condition is called the secant condition:
+          </p>
+          <div class="equation-block">
+            \[
+              H_{k+1}y_k=s_k.
+            \]
+          </div>
+          <p>
+            Read it in words before reading it as algebra: the new inverse-Hessian
+            approximation should map the observed gradient change back to the
+            step that produced it. BFGS does not magically know the full Hessian.
+            It only forces the next matrix to be correct on the direction it just
+            measured, while changing the previous matrix as little as possible in
+            a carefully chosen sense.
+          </p>
+          <figure>
+            <img src="../assets/bfgs_secant_update.svg" alt="Python-generated BFGS secant condition diagram" />
+            <figcaption>
+              The generated diagram uses a recorded BFGS step on the Rosenbrock
+              function. Before the update, \(s_k\) and \(y_k\) are different
+              vectors. After the update, the new \(H_{k+1}\) maps \(y_k\) back
+              onto \(s_k\), which is exactly the secant condition.
+            </figcaption>
+          </figure>
+          <p>
+            To get that behavior, BFGS uses this rank-two update:
           </p>
           <div class="equation-block">
             \[
             \begin{aligned}
-              \frac{\partial f}{\partial x_0}
+              \rho_k &= \frac{1}{y_k^\mathsf{T}s_k},\\
+              H_{k+1}
               &=
-              -400x_0(x_1-x_0^2)-2(1-x_0),\\
-              \frac{\partial f}{\partial x_{N-1}}
-              &=
-              200(x_{N-1}-x_{N-2}^2).
+              (I-\rho_k s_k y_k^\mathsf{T})H_k(I-\rho_k y_k s_k^\mathsf{T})
+              + \rho_k s_k s_k^\mathsf{T}.
             \end{aligned}
             \]
           </div>
+          <p>
+            You do not need to memorize the formula first. Focus on what it
+            guarantees. The two outer factors correct the old model so it respects
+            the new gradient-change direction. The final
+            \(\rho_k s_k s_k^\mathsf{T}\) term inserts the measured displacement.
+            Together they preserve symmetry and, when
+            \(y_k^\mathsf{T}s_k>0\), preserve positive definiteness.
+          </p>
+          <p>
+            Positive definiteness matters because then \(p_k=-H_k g_k\) remains a
+            descent direction. In practice, line searches based on Wolfe
+            conditions are used partly because they encourage
+            \(y_k^\mathsf{T}s_k>0\). If that curvature test fails, robust
+            implementations damp, skip, or reset the update rather than trusting a
+            bad curvature lesson.
+          </p>
+        </section>
+
+        <section id="rosenbrock">
+          <h2>Watch It On Rosenbrock</h2>
+          <p>
+            The Rosenbrock function is a standard optimizer stress test because it
+            has an easy-to-state minimum inside a curved, narrow valley:
+          </p>
+          <div class="equation-block">
+            \[
+              f(x_0,x_1)=100(x_1-x_0^2)^2+(1-x_0)^2,
+              \qquad x^\star=(1,1),\quad f(x^\star)=0.
+            \]
+          </div>
+          <p>
+            This is exactly the type of shape where plain steepest descent tends
+            to zig-zag. BFGS begins with local gradient information, but as it
+            accumulates \((s_k,y_k)\) pairs, the inverse-Hessian estimate starts
+            bending directions along the valley instead of across it.
+          </p>
           <figure>
             <img src="../assets/bfgs_rosenbrock_path.svg" alt="BFGS path on Rosenbrock contours" />
             <figcaption>
-              BFGS starts with steep gradient information, then bends its search
-              direction as the inverse-Hessian approximation learns the valley's
-              curvature.
+              Early steps are cautious because the curvature model is still
+              learning. Later steps align more naturally with the valley because
+              \(H_k\) has absorbed several curvature lessons.
             </figcaption>
           </figure>
+          <p>
+            The payoff is not that gradients are free. The payoff is that each
+            gradient can make the next step much smarter. On smooth moderate-sized
+            problems, BFGS often needs far fewer objective evaluations than a
+            derivative-free search.
+          </p>
           <figure>
             <img src="../assets/bfgs_evaluation_efficiency.svg" alt="BFGS and Nelder-Mead evaluation efficiency comparison" />
             <figcaption>
-              With a useful gradient, BFGS usually reaches small function values
-              with far fewer objective evaluations than Nelder-Mead. Gradient
-              evaluations are the extra price paid for that curvature information.
+              With a reliable analytic gradient, BFGS commonly drives the best
+              objective value down with many fewer objective calls. Gradient
+              evaluations are the extra information being purchased.
             </figcaption>
           </figure>
         </section>
 
         <section id="scipy">
-          <h2>Using SciPy</h2>
+          <h2>Use BFGS In SciPy</h2>
           <p>
-            In SciPy, use <code>method="BFGS"</code> and pass the gradient through
-            <code>jac</code>. If <code>jac</code> is omitted, SciPy estimates the
-            gradient by finite differences.
+            In SciPy, call <code>minimize</code> with <code>method="BFGS"</code>.
+            Give it a gradient through <code>jac</code> when you can. If
+            <code>jac</code> is missing, SciPy estimates gradients by finite
+            differences, which can work but usually costs more function calls and
+            can be sensitive to scaling.
           </p>
           <pre><code>import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import check_grad, minimize
 
 def rosen(x):
     return np.sum(100.0 * (x[1:] - x[:-1]**2.0)**2.0 + (1 - x[:-1])**2.0)
 
 def rosen_der(x):
-    xm = x[1:-1]
-    xm_m1 = x[:-2]
-    xm_p1 = x[2:]
     der = np.zeros_like(x)
-    der[1:-1] = 200 * (xm - xm_m1**2) - 400 * (xm_p1 - xm**2) * xm - 2 * (1 - xm)
+    der[1:-1] = (
+        200 * (x[1:-1] - x[:-2]**2)
+        - 400 * x[1:-1] * (x[2:] - x[1:-1]**2)
+        - 2 * (1 - x[1:-1])
+    )
     der[0] = -400 * x[0] * (x[1] - x[0]**2) - 2 * (1 - x[0])
     der[-1] = 200 * (x[-1] - x[-2]**2)
     return der
 
 x0 = np.array([1.3, 0.7, 0.8, 1.9, 1.2])
+
+# A small value here is a strong sign that the analytic gradient matches rosen.
+print("gradient check:", check_grad(rosen, rosen_der, x0))
+
 result = minimize(
     rosen,
     x0,
     method="BFGS",
     jac=rosen_der,
-    options={"disp": True},
+    options={"gtol": 1e-8, "disp": True},
 )
 
-print(result.x)</code></pre>
+print(result.x)
+print(result.fun)
+print(result.success, result.message)</code></pre>
+          <p>
+            The returned <code>result.hess_inv</code> is the final inverse-Hessian
+            approximation. It is not the exact inverse Hessian, but it is often a
+            useful diagnostic: if the run converged cleanly, it represents the
+            curvature model BFGS ended with.
+          </p>
+          <div class="callout">
+            Practical habit: check the gradient before judging the optimizer. A
+            sign error, missing factor of 2, or variable-ordering bug can make
+            BFGS look unstable even when the algorithm is doing exactly what the
+            incorrect gradient tells it to do.
+          </div>
         </section>
 
         <section id="when">
@@ -194,24 +339,30 @@ print(result.x)</code></pre>
             </thead>
             <tbody>
               <tr>
-                <td>The objective is smooth and a gradient is available or cheap to estimate.</td>
-                <td>The number of variables is very large; storing a dense \(H_k\) can become expensive.</td>
+                <td>The objective is smooth, unconstrained, and moderate-sized.</td>
+                <td>The problem has simple bounds; use L-BFGS-B or another bounded method.</td>
               </tr>
               <tr>
-                <td>You want a strong default local optimizer without writing Hessian code.</td>
-                <td>The objective is noisy or nonsmooth enough that gradient differences become misleading.</td>
+                <td>A reliable gradient is available or cheap to estimate.</td>
+                <td>The function is noisy or nonsmooth enough that gradient differences are not trustworthy.</td>
               </tr>
               <tr>
-                <td>The problem is unconstrained and moderate-sized.</td>
+                <td>You want Newton-like behavior without coding Hessians.</td>
+                <td>The variable count is very large; dense \(H_k\) storage costs \(O(n^2)\) memory.</td>
+              </tr>
+              <tr>
+                <td>Your variables are reasonably scaled, or you can rescale them.</td>
                 <td>You can provide Hessian-vector products for a large problem; Newton-CG or trust-krylov may scale better.</td>
               </tr>
             </tbody>
           </table>
-          <div class="callout">
-            Practical habit: check the gradient implementation before trusting the
-            optimizer. A sign error in \(g_k\) turns BFGS from a fast method into a
-            very confident wrong turn.
-          </div>
+          <p>
+            The most common BFGS disappointments are not mysterious: inaccurate
+            gradients, badly scaled variables, noisy objectives, or asking a dense
+            method to handle a huge problem. When those are under control, BFGS is
+            one of the strongest default local optimizers for smooth unconstrained
+            minimization.
+          </p>
         </section>
 
         <p class="next-note">
@@ -223,10 +374,13 @@ print(result.x)</code></pre>
 
       <aside class="toc" aria-label="BFGS sections">
         <strong>On this page</strong>
-        <a href="#idea">Core idea</a>
-        <a href="#update">The BFGS update</a>
-        <a href="#rosenbrock">Rosenbrock example</a>
-        <a href="#scipy">Using SciPy</a>
+        <a href="#gradient">Gradient descent</a>
+        <a href="#newton">Newton first</a>
+        <a href="#bfgs-bridge">From Newton to BFGS</a>
+        <a href="#iteration">One iteration</a>
+        <a href="#secant">Curvature lesson</a>
+        <a href="#rosenbrock">Rosenbrock</a>
+        <a href="#scipy">SciPy usage</a>
         <a href="#when">When to use it</a>
       </aside>
     </main>
