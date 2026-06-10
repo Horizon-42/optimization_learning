@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Least-Squares Minimization</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script>
+      window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page">
+        <p class="kicker">Residual fitting with bounds and robust loss</p>
+        <h1>Least-squares minimization</h1>
+        <p class="lede">
+          Least squares turns model fitting into residual geometry. Instead of
+          minimizing one scalar function directly, <code>least_squares</code>
+          minimizes a structured sum of residual errors with optional bounds and
+          robust losses.
+        </p>
+        <nav class="nav-row" aria-label="Page navigation">
+          <a class="pill" href="../index.html">Overview</a>
+          <a class="pill" href="global-optimization.html">Global optimization</a>
+          <a class="pill active" href="least-squares.html">Least squares</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page content">
+      <article>
+        <section id="idea">
+          <h2>Core Idea</h2>
+          <p>
+            A residual function maps parameters to a vector of errors. SciPy's
+            least-squares solver minimizes a robustified residual objective:
+          </p>
+          <div class="equation-block">
+            \[
+              \min_x\ \frac{1}{2}\sum_{i=1}^{m}\rho\!\left(r_i(x)^2\right)
+              \quad
+              \text{subject to}
+              \quad
+              \ell\leq x\leq u.
+            \]
+          </div>
+          <p>
+            With the linear loss \(\rho(z)=z\), this reduces to the familiar
+            Euclidean residual norm:
+          </p>
+          <div class="equation-block">
+            \[
+              \frac{1}{2}\|r(x)\|_2^2
+              =
+              \frac{1}{2}r(x)^\mathsf{T}r(x).
+            \]
+          </div>
+        </section>
+
+        <section id="fit">
+          <h2>Bounded Enzyme-Reaction Fit</h2>
+          <p>
+            The SciPy tutorial uses an enzymatic reaction model with eleven
+            residuals. For measurement \(u_i\) and response \(y_i\), the residual
+            is
+          </p>
+          <div class="equation-block">
+            \[
+              r_i(x)
+              =
+              \frac{x_0(u_i^2+x_1u_i)}
+                   {u_i^2+x_2u_i+x_3}
+              -y_i,
+              \qquad
+              x=(x_0,x_1,x_2,x_3)^\mathsf{T}.
+            \]
+          </div>
+          <figure>
+            <img src="../assets/least_squares_enzyme_fit.svg" alt="Bounded nonlinear least-squares fit and residuals" />
+            <figcaption>
+              The model is fitted by shrinking the residual vector. Vertical
+              segments show the final residuals between observations and the
+              fitted model.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="jacobian">
+          <h2>Jacobian Geometry</h2>
+          <p>
+            Least-squares solvers use the residual Jacobian
+            \(J_{ij}=\partial r_i/\partial x_j\). Near a solution, the
+            Gauss-Newton model is
+          </p>
+          <div class="equation-block">
+            \[
+              r(x+p)\approx r(x)+Jp,
+              \qquad
+              \min_p\ \frac{1}{2}\|r(x)+Jp\|_2^2.
+            \]
+          </div>
+          <p>
+            Ignoring bounds and robust weights, the normal equations are
+          </p>
+          <div class="equation-block">
+            \[
+              J^\mathsf{T}Jp=-J^\mathsf{T}r.
+            \]
+          </div>
+          <figure>
+            <img src="../assets/least_squares_jacobian_diagnostics.svg" alt="Least-squares Jacobian heatmap and singular values" />
+            <figcaption>
+              The analytic Jacobian tells the solver how each parameter changes
+              each residual. Its singular values reveal how well-conditioned the
+              local residual geometry is.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="robust">
+          <h2>Robust Losses</h2>
+          <p>
+            Robust losses reduce the influence of large residuals. For example,
+            <code>loss="soft_l1"</code> behaves quadratically near zero but grows
+            more gently for outliers:
+          </p>
+          <div class="equation-block">
+            \[
+              \rho_{\mathrm{soft}\_\ell_1}(z)
+              =
+              2\left(\sqrt{1+z}-1\right).
+            \]
+          </div>
+          <figure>
+            <img src="../assets/least_squares_robust_loss.svg" alt="Robust least-squares fit compared with linear loss under outliers" />
+            <figcaption>
+              With outliers present, the ordinary linear loss bends toward large
+              residuals. A robust loss leaves those residuals larger and preserves
+              the main trend.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="scipy">
+          <h2>Using SciPy</h2>
+          <p>
+            In SciPy, pass the residual function to <code>least_squares</code>.
+            A closed-form Jacobian is usually worth providing when available.
+          </p>
+          <pre><code>import numpy as np
+from scipy.optimize import least_squares
+
+u = np.array([4.0, 2.0, 1.0, 5.0e-1, 2.5e-1, 1.67e-1, 1.25e-1,
+              1.0e-1, 8.33e-2, 7.14e-2, 6.25e-2])
+y = np.array([1.957e-1, 1.947e-1, 1.735e-1, 1.6e-1, 8.44e-2,
+              6.27e-2, 4.56e-2, 3.42e-2, 3.23e-2, 2.35e-2, 2.46e-2])
+
+def model(x, u):
+    return x[0] * (u**2 + x[1] * u) / (u**2 + x[2] * u + x[3])
+
+def fun(x, u, y):
+    return model(x, u) - y
+
+def jac(x, u, y):
+    J = np.empty((u.size, x.size))
+    den = u**2 + x[2] * u + x[3]
+    num = u**2 + x[1] * u
+    J[:, 0] = num / den
+    J[:, 1] = x[0] * u / den
+    J[:, 2] = -x[0] * num * u / den**2
+    J[:, 3] = -x[0] * num / den**2
+    return J
+
+result = least_squares(
+    fun,
+    x0=np.array([2.5, 3.9, 4.15, 3.9]),
+    jac=jac,
+    bounds=(0, 100),
+    args=(u, y),
+)
+
+print(result.x)</code></pre>
+        </section>
+
+        <section id="when">
+          <h2>When To Use It</h2>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Use least_squares when</th>
+                <th>Prefer minimize when</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Your objective is naturally a vector of residuals from model fitting, calibration, or inverse problems.</td>
+                <td>The objective is a single scalar expression without meaningful residual structure.</td>
+              </tr>
+              <tr>
+                <td>You can provide a dense, sparse, or structured residual Jacobian.</td>
+                <td>You need general nonlinear constraints beyond simple parameter bounds.</td>
+              </tr>
+              <tr>
+                <td>You need robust losses to reduce outlier influence.</td>
+                <td>The loss and constraints are custom enough that direct scalar minimization is simpler.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            Practical habit: scale residuals before fitting. Least squares treats
+            residual magnitude as meaning, so units and weights can decide the
+            solution as much as the optimizer does.
+          </div>
+        </section>
+      </article>
+
+      <aside class="toc" aria-label="least-squares sections">
+        <strong>On this page</strong>
+        <a href="#idea">Core idea</a>
+        <a href="#fit">Bounded fit</a>
+        <a href="#jacobian">Jacobian geometry</a>
+        <a href="#robust">Robust losses</a>
+        <a href="#scipy">Using SciPy</a>
+        <a href="#when">When to use it</a>
+      </aside>
+    </main>
+  </body>
+</html>

@@ -120,6 +120,49 @@ main.page {
   margin-top: 26px;
 }
 
+.category-section {
+  margin-top: 42px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.category-header {
+  max-width: 900px;
+}
+
+.category-kicker {
+  margin: 0 0 8px;
+  color: var(--teal);
+  font-weight: 750;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.category-header h2 {
+  margin-top: 0;
+}
+
+.method-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.method-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
 .algorithm-card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -142,6 +185,14 @@ main.page {
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--teal);
+}
+
+.status.planned {
+  color: var(--muted);
+}
+
+.status.progress {
+  color: var(--amber);
 }
 
 .content {
