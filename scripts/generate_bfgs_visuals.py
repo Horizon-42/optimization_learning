@@ -240,6 +240,108 @@ def plot_secant_update_svg() -> None:
     (ASSET_DIR / "bfgs_secant_update.svg").write_text(svg, encoding="utf-8")
 
 
+def plot_line_search_svg() -> None:
+    history = bfgs_history_plain([-1.2, 1.0])
+    step_index = 6
+    current = history[step_index]
+    following = history[step_index + 1]
+    x = current["x"]
+    g = current["grad"]
+    h_inv = current["h_inv"]
+    p = scale_vec(mat_vec(h_inv, g), -1.0)
+    fx = rosen2_plain(x)
+    accepted_alpha = float(following["alpha"])
+    slope = dot(g, p)
+
+    samples: list[tuple[float, float]] = []
+    for index in range(161):
+        alpha = index / 160
+        value = rosen2_plain(add_vec(x, scale_vec(p, alpha)))
+        samples.append((alpha, value))
+
+    y_values = [value for _, value in samples] + [fx]
+    y_min = min(y_values) - 0.12
+    y_max = max(y_values) + 0.18
+    plot_x = 86.0
+    plot_y = 386.0
+    plot_w = 790.0
+    plot_h = 270.0
+
+    def sx(alpha: float) -> float:
+        return plot_x + alpha * plot_w
+
+    def sy(value: float) -> float:
+        return plot_y - (value - y_min) / (y_max - y_min) * plot_h
+
+    curve_points = " ".join(f"{sx(alpha):.1f},{sy(value):.1f}" for alpha, value in samples)
+    current_y = sy(fx)
+    armijo_points = " ".join(
+        f"{sx(alpha):.1f},{sy(fx + 1e-4 * alpha * slope):.1f}"
+        for alpha in [index / 80 for index in range(81)]
+    )
+    candidates = [
+        (1.0, "reject", "#dc2626"),
+        (0.5, "reject", "#dc2626"),
+        (accepted_alpha, "accept", "#0f766e"),
+    ]
+    candidate_marks = []
+    for alpha, label, color in candidates:
+        value = rosen2_plain(add_vec(x, scale_vec(p, alpha)))
+        label_dx = -72 if alpha > 0.9 else 10
+        label_dy = -10 if label == "reject" else -18
+        candidate_marks.append(
+            f"""
+      <line x1="{sx(alpha):.1f}" y1="{plot_y:.1f}" x2="{sx(alpha):.1f}" y2="{sy(value):.1f}" stroke="{color}" stroke-width="1.6" stroke-dasharray="6 6"/>
+      <circle cx="{sx(alpha):.1f}" cy="{sy(value):.1f}" r="7" fill="{color}" stroke="white" stroke-width="2"/>
+      <text x="{sx(alpha) + label_dx:.1f}" y="{sy(value) + label_dy:.1f}" class="label" fill="{color}">alpha={alpha:g}: {label}</text>
+    """
+        )
+
+    tick_labels = []
+    for alpha in [0.0, 0.25, 0.5, 0.75, 1.0]:
+        tick_labels.append(
+            f"""
+      <line x1="{sx(alpha):.1f}" y1="{plot_y:.1f}" x2="{sx(alpha):.1f}" y2="{plot_y + 6:.1f}" stroke="#94a3b8" stroke-width="1"/>
+      <text x="{sx(alpha):.1f}" y="{plot_y + 24:.1f}" text-anchor="middle" class="small">{alpha:g}</text>
+    """
+        )
+
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="960" height="520" viewBox="0 0 960 520" role="img" aria-labelledby="title desc">
+  <title id="title">BFGS line search visualization</title>
+  <desc id="desc">A Python-generated chart of the Rosenbrock objective along one BFGS search direction, showing rejected step lengths and the accepted step length.</desc>
+  <defs>
+    <style>
+      .title {{ font: 700 25px Inter, Arial, sans-serif; fill: #172033; }}
+      .body {{ font: 14px Inter, Arial, sans-serif; fill: #5f6b7a; }}
+      .label {{ font: 700 14px Inter, Arial, sans-serif; }}
+      .small {{ font: 12px Inter, Arial, sans-serif; fill: #5f6b7a; }}
+      .axis {{ font: 700 13px Inter, Arial, sans-serif; fill: #172033; }}
+    </style>
+  </defs>
+  <rect width="960" height="520" fill="#ffffff"/>
+  <text x="36" y="48" class="title">Line search chooses how far to trust the direction</text>
+  <text x="36" y="78" class="body">For one BFGS direction, plot phi(alpha) = f(x_k + alpha p_k). The direction is downhill at alpha=0, but a full step can overshoot.</text>
+
+  <rect x="48" y="105" width="864" height="352" rx="8" fill="#f8fafc" stroke="#d9e1ea"/>
+  <line x1="{plot_x:.1f}" y1="{plot_y:.1f}" x2="{plot_x + plot_w:.1f}" y2="{plot_y:.1f}" stroke="#172033" stroke-width="1.5"/>
+  <line x1="{plot_x:.1f}" y1="{plot_y:.1f}" x2="{plot_x:.1f}" y2="{plot_y - plot_h:.1f}" stroke="#172033" stroke-width="1.5"/>
+  <line x1="{plot_x:.1f}" y1="{current_y:.1f}" x2="{plot_x + plot_w:.1f}" y2="{current_y:.1f}" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="7 7"/>
+  <polyline points="{armijo_points}" fill="none" stroke="#b45309" stroke-width="1.6" stroke-dasharray="8 6"/>
+  <polyline points="{curve_points}" fill="none" stroke="#2563eb" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="{sx(0):.1f}" cy="{current_y:.1f}" r="6" fill="#172033"/>
+  <text x="{sx(0) + 10:.1f}" y="{current_y - 10:.1f}" class="label" fill="#172033">current f(x_k)</text>
+  {"".join(candidate_marks)}
+  {"".join(tick_labels)}
+  <text x="{plot_x + plot_w / 2:.1f}" y="448" text-anchor="middle" class="axis">step length alpha</text>
+  <text x="44" y="250" text-anchor="middle" transform="rotate(-90 44 250)" class="axis">objective along the search line</text>
+  <text x="590" y="138" class="small">Backtracking example: try 1, then 0.5, then accept {accepted_alpha:g}.</text>
+  <text x="590" y="158" class="small">Dashed amber line: sufficient-decrease threshold.</text>
+  <text x="590" y="178" class="small">Generated from BFGS iteration {step_index} on Rosenbrock.</text>
+</svg>
+"""
+    (ASSET_DIR / "bfgs_line_search.svg").write_text(svg, encoding="utf-8")
+
+
 def rosen2(x: np.ndarray) -> float:
     """Two-dimensional Rosenbrock function."""
     return float(100.0 * (x[1] - x[0] ** 2) ** 2 + (1.0 - x[0]) ** 2)
@@ -451,6 +553,7 @@ def plot_evaluation_efficiency() -> None:
 
 def main() -> None:
     plot_secant_update_svg()
+    plot_line_search_svg()
     if NUMERIC_IMPORT_ERROR is None:
         plot_bfgs_path()
         plot_evaluation_efficiency()

@@ -152,7 +152,7 @@
             <li>
               Use a line search to choose a step length \(\alpha_k\). The line
               search prevents the curvature model from taking an impressive but
-              reckless full step.
+              reckless full step. The next section slows down this part.
             </li>
             <li>
               Move to \(x_{k+1}=x_k+\alpha_k p_k\), then evaluate
@@ -171,10 +171,370 @@
           </p>
         </section>
 
+        <section id="line-search">
+          <h2>Line Search: Choosing Alpha</h2>
+          <p>
+            The direction \(p_k=-H_k g_k\) answers "which way should we go?" Line
+            search answers a different question: "how far should we trust that
+            direction?" Instead of jumping immediately to \(x_k+p_k\), BFGS
+            studies the one-dimensional function along the search ray:
+          </p>
+          <div class="equation-block">
+            \[
+              \phi(\alpha)=f(x_k+\alpha p_k),
+              \qquad \alpha>0.
+            \]
+          </div>
+          <p>
+            That notation means: freeze the current point \(x_k\) and direction
+            \(p_k\), then treat only \(\alpha\) as the variable. For the
+            Rosenbrock example in the figure below, the generated BFGS trace uses
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              x_k &\approx (-0.381971,\;0.133909),\\
+              p_k &\approx (0.308881,\;-0.302461).
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            Since the two-dimensional Rosenbrock function is
+            \(f(x_0,x_1)=100(x_1-x_0^2)^2+(1-x_0)^2\), the line-search function
+            for this particular step comes from the point on the search line
+            \(z(\alpha)=x_k+\alpha p_k\):
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              z_0(\alpha) &= -0.381971+0.308881\alpha,\\
+              z_1(\alpha) &= 0.133909-0.302461\alpha,\\
+              \phi(\alpha)
+              &=100\left(z_1(\alpha)-z_0(\alpha)^2\right)^2\\
+              &\quad+\left(1-z_0(\alpha)\right)^2.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            So the line search is not optimizing a mysterious new objective. It is
+            sampling the original Rosenbrock function along one straight line in
+            parameter space.
+          </p>
+          <h3>Is \(\phi(\alpha)\) Just \(f\) With A Different Variable?</h3>
+          <p>
+            Not quite. The original objective \(f\) still takes the full parameter
+            vector as input. If \(x\in\mathbb{R}^n\), then
+            \(f(x)\) expects \(n\) numbers. The function \(\phi\) is a new
+            one-dimensional slice made by composing \(f\) with the line
+            \(x_k+\alpha p_k\):
+          </p>
+          <div class="equation-block">
+            \[
+              \alpha
+              \;\longmapsto\;
+              x_k+\alpha p_k
+              \;\longmapsto\;
+              f(x_k+\alpha p_k).
+            \]
+          </div>
+          <p>
+            So \(\phi\) is not the same function as \(f\). It is \(f\) viewed
+            through one chosen search line. When \(f\) is two-dimensional, the
+            line search temporarily turns the problem into a one-dimensional
+            question. When \(f\) has a million variables, the same idea still
+            gives a one-dimensional question because only \(\alpha\) is allowed to
+            move.
+          </p>
+          <p>
+            If \(\alpha\) is too large, the step can shoot across the valley and
+            increase the objective. If \(\alpha\) is too tiny, the method makes
+            safe but timid progress and learns weak curvature information. A line
+            search looks for a middle ground: enough decrease in \(f\), while
+            still taking a meaningful step.
+          </p>
+          <h3>Where Does \(\phi'(\alpha)\) Come From?</h3>
+          <p>
+            Do not jump straight to the compact formula. First name the point on
+            the search line:
+          </p>
+          <div class="equation-block">
+            \[
+              z(\alpha)=x_k+\alpha p_k.
+            \]
+          </div>
+          <p>
+            In coordinates, this means each component of \(z\) is a simple linear
+            function of the scalar \(\alpha\):
+          </p>
+          <div class="equation-block">
+            \[
+              z_i(\alpha)=x_{k,i}+\alpha p_{k,i}.
+            \]
+          </div>
+          <p>
+            Differentiate that coordinate with respect to \(\alpha\). The current
+            coordinate \(x_{k,i}\) is fixed, and the direction component
+            \(p_{k,i}\) is fixed, so
+          </p>
+          <div class="equation-block">
+            \[
+              \frac{dz_i}{d\alpha}=p_{k,i}.
+            \]
+          </div>
+          <p>
+            Now remember that \(\phi(\alpha)=f(z(\alpha))\). Changing
+            \(\alpha\) changes every coordinate \(z_i\), and each coordinate
+            changes \(f\) according to the partial derivative
+            \(\partial f/\partial z_i\). The multivariable chain rule adds those
+            contributions:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \phi'(\alpha)
+              &=
+              \frac{d}{d\alpha}f(z(\alpha))\\
+              &=
+              \sum_i
+              \frac{\partial f}{\partial z_i}(z(\alpha))
+              \frac{dz_i}{d\alpha}\\
+              &=
+              \sum_i
+              \frac{\partial f}{\partial z_i}(z(\alpha))
+              p_{k,i}.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            That last sum is exactly a dot product: the gradient of \(f\) at the
+            current point on the line, dotted with the search direction:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \phi'(\alpha)
+              &=
+              \nabla f(z(\alpha))^\mathsf{T}p_k\\
+              &=
+              \nabla f(x_k+\alpha p_k)^\mathsf{T}p_k.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            There are two derivative objects here, so keep them separate.
+            \(\nabla f(\cdot)\) is the gradient of the original objective with
+            respect to the full vector input. \(\phi'(\alpha)\) is the derivative
+            of the one-dimensional slice with respect to the scalar
+            \(\alpha\). The chain rule connects them, but they are not the same
+            kind of derivative: \(\nabla f(z(\alpha))\) is a vector, while
+            \(\phi'(\alpha)\) is a scalar.
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \nabla f(z(\alpha))
+              &\in \mathbb{R}^n,\\
+              \phi'(\alpha)
+              &\in \mathbb{R}.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            The scalar \(\phi'(\alpha)\) is produced by taking that gradient
+            vector and projecting it onto the search direction:
+          </p>
+          <div class="equation-block">
+            \[
+              \phi'(\alpha)
+              =
+              \nabla f(z(\alpha))^\mathsf{T}p_k.
+            \]
+          </div>
+          <p>
+            Now set \(\alpha=0\). The line starts at the current iterate because
+            \(z(0)=x_k+0p_k=x_k\). By definition, \(g_k\) is the gradient of the
+            original objective at that same current iterate:
+          </p>
+          <div class="equation-block">
+            \[
+              g_k=\nabla f(x_k).
+            \]
+          </div>
+          <p>
+            Therefore the gradient of \(f\) evaluated at the start of the line is
+            the same vector:
+          </p>
+          <div class="equation-block">
+            \[
+              \nabla f(z(0))
+              =
+              \nabla f(x_k)
+              =
+              g_k.
+            \]
+          </div>
+          <p>
+            Substitute that into the slice derivative:
+          </p>
+          <div class="equation-block">
+            \[
+              \phi'(0)=g_k^\mathsf{T}p_k.
+            \]
+          </div>
+          <p>
+            For a valid BFGS search direction, this number is negative. In plain
+            words: at the start of the line, increasing \(\alpha\) a little should
+            move downhill.
+          </p>
+          <h3>Why Use The Armijo Condition?</h3>
+          <p>
+            A tempting rule would be "accept any \(\alpha\) that makes
+            \(f\) smaller." That is too weak. A microscopic step can reduce the
+            objective by a microscopic amount, pass that rule, and still waste an
+            iteration. Armijo asks for enough decrease compared with the local
+            downhill slope predicted by \(\phi'(0)\).
+          </p>
+          <p>
+            A common first test is sufficient decrease, also called the Armijo
+            condition:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              f(x_k+\alpha p_k)
+              &\le
+              f(x_k)+c_1\alpha g_k^\mathsf{T}p_k,\\
+              0 &\lt c_1 \lt 1.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            Because \(p_k\) should be a descent direction,
+            \(g_k^\mathsf{T}p_k \lt 0\). The right-hand side is therefore slightly
+            below the current value \(f(x_k)\), so the candidate step must reduce
+            the objective by a reasonable amount. The constant \(c_1\) is usually
+            small, so Armijo does not demand the full linear prediction; it
+            demands a modest fraction of it. That makes the test forgiving enough
+            for curved objectives, but strict enough to reject obvious overshoots.
+          </p>
+          <p>
+            Armijo alone mostly protects against steps that are too large. Very
+            tiny steps can still pass it. That is why many BFGS implementations
+            also use a curvature condition, often as part of the Wolfe or strong
+            Wolfe conditions, to avoid accepting a step that is technically lower
+            but still poorly placed along the line.
+          </p>
+          <h3>Can We Optimize \(\alpha\) Directly?</h3>
+          <p>
+            Yes, in principle. Since \(\alpha\) is scalar, an exact line search
+            would try to minimize \(\phi(\alpha)\) directly, often by looking for
+            a stationary point:
+          </p>
+          <div class="equation-block">
+            \[
+              \phi'(\alpha)
+              =
+              \nabla f(x_k+\alpha p_k)^\mathsf{T}p_k
+              =
+              0.
+            \]
+          </div>
+          <p>
+            The practical issue is cost and reliability. Solving this one
+            dimensional problem exactly can require many extra objective and
+            gradient evaluations. The function \(\phi\) may also be nonconvex
+            along the line, so \(\phi'(\alpha)=0\) can describe a local minimum, a
+            local maximum, or a stationary point that is farther than BFGS needs
+            to go.
+          </p>
+          <p>
+            BFGS usually does not need the best possible \(\alpha\) on the current
+            line. It needs a step that decreases the objective, is not absurdly
+            small, and produces trustworthy curvature information for the next
+            update. Armijo and Wolfe-style inexact line searches target exactly
+            that cheaper, algorithm-level goal.
+          </p>
+          <figure>
+            <img src="../assets/bfgs_line_search.svg" alt="Python-generated line-search plot along a BFGS direction" />
+            <figcaption>
+              The generated example uses one BFGS direction on the Rosenbrock
+              function. A full step \(\alpha=1\) overshoots, \(\alpha=0.5\) is
+              still not good enough, and \(\alpha=0.25\) gives a clear decrease,
+              so the backtracking line search accepts it.
+            </figcaption>
+          </figure>
+          <p>
+            In this generated trace, the objective starts at about \(1.924\).
+            Trying \(\alpha=1\) raises it to about \(4.175\), so that trial is
+            rejected. Trying \(\alpha=0.5\) still lands above the starting value,
+            around \(1.984\). Trying \(\alpha=0.25\) lowers the objective to about
+            \(1.822\), so the step is accepted and BFGS can form the curvature
+            pair \(s_k=x_{k+1}-x_k\) and \(y_k=g_{k+1}-g_k\).
+          </p>
+          <div class="callout">
+            Practical connection: line search is not just a safety brake. For
+            BFGS, a good line search also helps make \(y_k^\mathsf{T}s_k>0\),
+            which is the curvature sign needed for the inverse-Hessian estimate to
+            stay positive definite.
+          </div>
+        </section>
+
         <section id="secant">
           <h2>The Curvature Lesson</h2>
           <p>
-            The key condition is called the secant condition:
+            The key condition is called the secant condition. Here is the slow
+            path to it.
+          </p>
+          <p>
+            Start with the second-order idea from Newton's method. If the Hessian
+            near the current step were a constant matrix \(B\), then gradients
+            would change approximately linearly:
+          </p>
+          <div class="equation-block">
+            \[
+              g(x_k+s) \approx g(x_k) + B s.
+            \]
+          </div>
+          <p>
+            Now plug in the step BFGS actually took,
+            \(s_k=x_{k+1}-x_k\). The observed gradient change is
+            \(y_k=g_{k+1}-g_k\), so the local Hessian model should explain that
+            observation:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              g_{k+1}
+              &\approx g_k + B_{k+1}s_k,\\
+              y_k = g_{k+1}-g_k
+              &\approx B_{k+1}s_k.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            That gives the Hessian version of the secant condition:
+          </p>
+          <div class="equation-block">
+            \[
+              B_{k+1}s_k = y_k.
+            \]
+          </div>
+          <p>
+            BFGS stores an inverse-Hessian approximation \(H_k\), not the Hessian
+            approximation \(B_k\). If \(H_{k+1}\) is supposed to behave like
+            \(B_{k+1}^{-1}\), multiply the Hessian condition by that inverse:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              B_{k+1}s_k &= y_k,\\
+              s_k &= B_{k+1}^{-1}y_k,\\
+              s_k &\approx H_{k+1}y_k.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            So the inverse-Hessian version used by BFGS is
           </p>
           <div class="equation-block">
             \[
@@ -188,6 +548,11 @@
             It only forces the next matrix to be correct on the direction it just
             measured, while changing the previous matrix as little as possible in
             a carefully chosen sense.
+          </p>
+          <p>
+            In one sentence: \(s_k\) is what you did, \(y_k\) is how the gradient
+            responded, and the secant condition makes the next curvature model
+            remember that measured cause-and-effect pair exactly.
           </p>
           <figure>
             <img src="../assets/bfgs_secant_update.svg" alt="Python-generated BFGS secant condition diagram" />
@@ -207,8 +572,11 @@
               \rho_k &= \frac{1}{y_k^\mathsf{T}s_k},\\
               H_{k+1}
               &=
-              (I-\rho_k s_k y_k^\mathsf{T})H_k(I-\rho_k y_k s_k^\mathsf{T})
-              + \rho_k s_k s_k^\mathsf{T}.
+              (I-\rho_k s_k y_k^\mathsf{T})
+              H_k
+              (I-\rho_k y_k s_k^\mathsf{T})\\
+              &\quad+
+              \rho_k s_k s_k^\mathsf{T}.
             \end{aligned}
             \]
           </div>
@@ -378,6 +746,7 @@ print(result.success, result.message)</code></pre>
         <a href="#newton">Newton first</a>
         <a href="#bfgs-bridge">From Newton to BFGS</a>
         <a href="#iteration">One iteration</a>
+        <a href="#line-search">Line search</a>
         <a href="#secant">Curvature lesson</a>
         <a href="#rosenbrock">Rosenbrock</a>
         <a href="#scipy">SciPy usage</a>
