@@ -51,12 +51,13 @@
           </p>
           <div class="equation-block">
             \[
+            \begin{aligned}
               m_k(p)
-              =
-              f(x_k) + g_k^\mathsf{T}p
-              + \frac{1}{2}p^\mathsf{T}H_kp,
-              \qquad
-              H_k=\nabla^2 f(x_k).
+              &=
+              f(x_k) + g_k^\mathsf{T}p\\
+              &\quad + \frac{1}{2}p^\mathsf{T}H_kp,\\
+              H_k&=\nabla^2 f(x_k).
+            \end{aligned}
             \]
           </div>
           <p>
@@ -151,8 +152,10 @@
           </p>
           <div class="equation-block">
             \[
-              \nabla m_k(p)=g_k+H_kp=0,
-              \qquad \text{so} \qquad H_kp=-g_k.
+            \begin{aligned}
+              \nabla m_k(p)&=g_k+H_kp=0,\\
+              H_kp&=-g_k.
+            \end{aligned}
             \]
           </div>
           <p>
@@ -332,8 +335,18 @@
             \]
           </div>
           <p>
-            A basic sufficient-decrease test asks whether the objective dropped
-            enough compared with the directional derivative:
+            During that line search, \(x_k\) and \(p_k\) are fixed. The only
+            moving quantity is the scalar \(\alpha\). So the algorithm is really
+            checking a one-dimensional slice of the original objective,
+            \(\phi(\alpha)=f(x_k+\alpha p_k)\), not inventing a new
+            optimization problem.
+          </p>
+          <p>
+            The tempting shortcut is to accept any \(\alpha\) that makes
+            \(f(x_k+\alpha p_k)<f(x_k)\). That is too weak. A microscopic step
+            would pass the test, even if it wasted the expensive Newton-CG
+            direction. A sufficient-decrease test asks for progress proportional
+            to the initial downhill slope:
           </p>
           <div class="equation-block">
             \[
@@ -344,10 +357,17 @@
             \]
           </div>
           <p>
-            Many implementations also use a curvature condition, giving a Wolfe
-            line search. You do not need to memorize the constants to understand
-            the role: the line search turns a locally promising direction into a
-            globally safer step.
+            The scalar \(c_1\) is the caution setting. Because a descent
+            direction has \(g_k^\mathsf{T}p_k<0\), the right side is below
+            \(f(x_k)\). A small \(c_1\) asks for a modest but nontrivial drop; it
+            filters out steps that technically decrease the objective but barely
+            move. Wolfe-style line searches add a curvature check as well, so the
+            accepted \(\alpha\) is not only safe but also not needlessly tiny.
+          </p>
+          <p>
+            Meaning: CG chooses a curvature-aware direction in step space. The
+            line search chooses how much of that direction the real nonlinear
+            objective is willing to accept.
           </p>
         </section>
 
@@ -358,8 +378,11 @@
           </p>
           <div class="equation-block">
             \[
+            \begin{aligned}
               f(x_0,x_1)=100(x_1-x_0^2)^2+(1-x_0)^2,
-              \qquad x^\star=(1,1),\quad f(x^\star)=0.
+              \\
+              x^\star=(1,1),\quad f(x^\star)=0.
+            \end{aligned}
             \]
           </div>
           <p>
@@ -396,11 +419,13 @@
           </p>
           <div class="equation-block">
             \[
+            \begin{aligned}
               [H(x)p]_i
-              =
-              -400x_{i-1}p_{i-1}
-              +(202+1200x_i^2-400x_{i+1})p_i
-              -400x_ip_{i+1}.
+              &=
+              -400x_{i-1}p_{i-1}\\
+              &\quad +(202+1200x_i^2-400x_{i+1})p_i\\
+              &\quad -400x_ip_{i+1}.
+            \end{aligned}
             \]
           </div>
           <p>

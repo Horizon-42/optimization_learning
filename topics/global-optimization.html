@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Global Optimization Algorithms</title>
+    <title>Global Optimization Tutorial</title>
     <link rel="stylesheet" href="../styles.css" />
     <script>
       window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
@@ -14,11 +14,12 @@
     <header class="site-header">
       <div class="page">
         <p class="kicker">Bounded many-basin optimization</p>
-        <h1>Global optimization</h1>
+        <h1>Global optimization tutorial</h1>
         <p class="lede">
-          Global optimizers search a bounded domain when the surface may contain
-          many local minima. They trade more exploration for a better chance of
-          finding the basin that local minimizers would miss.
+          Global optimizers search a bounded domain when one local run is too
+          dependent on the starting point. This tutorial starts from the local
+          minimizer failure mode, then compares SciPy's global search families on
+          the eggholder surface.
         </p>
         <nav class="nav-row" aria-label="Page navigation">
           <a class="pill" href="../index.html">Overview</a>
@@ -37,44 +38,76 @@
     <main class="page content">
       <article>
         <section id="idea">
-          <h2>Core Idea</h2>
+          <h2>From One Basin To Many</h2>
           <p>
-            A local optimizer tries to improve from one starting point. A global
-            optimizer treats the bounded search space as part of the problem:
+            A local minimizer starts from one point and tries to improve nearby.
+            That is exactly what you want when the surface has one obvious basin
+            or when your starting point is already good. But on a rough surface,
+            "nearby improvement" can trap the optimizer in a basin that is low
+            compared with its neighbors but not low compared with the whole
+            domain.
+          </p>
+          <p>
+            Global optimization adds the bounded search domain to the problem.
+            The variable \(x\) must stay inside a box \(\Omega\). Each coordinate
+            has a lower bound \(\ell_i\) and an upper bound \(u_i\):
           </p>
           <div class="equation-block">
             \[
-              \min_{x\in\Omega} f(x),
-              \qquad
-              \Omega=\{x: \ell_i\leq x_i\leq u_i,\ i=1,\ldots,N\}.
+            \begin{aligned}
+              \min_{x\in\Omega}\quad & f(x),\\
+              \Omega
+              &=
+              \{x:\ell_i\leq x_i\leq u_i\}.
+            \end{aligned}
             \]
           </div>
           <p>
-            The goal is not just stationarity. A global solution should beat all
-            other feasible points:
+            The global promise is stronger than local stationarity. A true global
+            minimizer \(x^\star\) should beat every feasible point in the bounded
+            domain:
           </p>
           <div class="equation-block">
             \[
               f(x^\star)\leq f(x)
-              \quad\text{for every}\quad x\in\Omega.
+              \quad\text{for all }x\in\Omega.
             \]
           </div>
+          <p>
+            The tempting shortcut is to run a local optimizer once and trust the
+            answer. That can be fine on a simple surface. On a many-basin
+            surface, it mainly tells you which basin the starting point fell
+            into.
+          </p>
         </section>
 
         <section id="eggholder">
-          <h2>Eggholder Landscape</h2>
+          <h2>The Eggholder Landscape</h2>
           <p>
-            The SciPy tutorial demonstrates global optimization on the eggholder
-            function, a bounded two-dimensional surface with many deceptive
-            valleys:
+            The SciPy tutorial uses the eggholder function because it makes the
+            global-search problem visible. The input has two coordinates,
+            \(x_0\) and \(x_1\), both bounded between \(-512\) and \(512\). The
+            surface has many valleys, ridges, and local minima. Writing the
+            repeated pieces as \(a\), \(b\), and \(c\) makes the shape easier to
+            read:
           </p>
           <div class="equation-block">
             \[
-              f(x_0,x_1)=
-              -(x_1+47)\sin\sqrt{\left|x_0/2+x_1+47\right|}
-              -x_0\sin\sqrt{\left|x_0-(x_1+47)\right|}.
+            \begin{aligned}
+              a &= x_1 + 47,\\
+              b &= x_0/2 + x_1 + 47,\\
+              c &= x_0 - a,\\
+              f(x_0,x_1)
+              &= -a\sin\sqrt{|b|}
+              - x_0\sin\sqrt{|c|}.
+            \end{aligned}
             \]
           </div>
+          <p>
+            The formula is less important than the shape. A small move can leave
+            one valley and enter another. A local optimizer may do everything
+            right inside one basin and still miss a much lower basin elsewhere.
+          </p>
           <figure>
             <img src="../assets/global_eggholder_landscape.svg" alt="Eggholder landscape with global optimizer result markers" />
             <figcaption>
@@ -85,13 +118,73 @@
           </figure>
         </section>
 
-        <section id="families">
-          <h2>Optimizer Families</h2>
+        <section id="local-traps">
+          <h2>Why Local Search Is Not Enough</h2>
           <p>
-            SciPy's global optimizers cover several search styles. The right
-            choice depends on whether you need deterministic coverage, population
-            search, stochastic jumps, or a local-minimizer wrapper.
+            A local optimizer can stop at a point \(\hat{x}\) where the local
+            slope is nearly zero. That is a local success signal, not a global
+            one:
           </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \nabla f(\hat{x})&\approx 0,\\
+              f(\hat{x})&\neq \min_{x\in\Omega} f(x)
+              \quad\text{in general}.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            Another tempting shortcut is to launch many random local starts and
+            take the best one. That is often a useful baseline, but it is still a
+            sampling strategy. If the best basin is small or hard to enter, a
+            pile of local runs may miss it.
+          </p>
+          <figure>
+            <img src="../assets/global_local_traps.svg" alt="Local optimizer starts falling into multiple eggholder basins" />
+            <figcaption>
+              Random L-BFGS-B starts land in many different eggholder basins.
+              Global methods are useful when a single local run is too dependent
+              on initialization.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="families">
+          <h2>Global Search Families</h2>
+          <p>
+            There is no universally best global optimizer because "explore the
+            whole box" can mean several different things. SciPy's global methods
+            differ by how they choose candidate points before optional local
+            polishing.
+          </p>
+
+          <h3>Cover The Domain Deterministically</h3>
+          <p>
+            <code>shgo</code> and <code>direct</code> are deterministic bounded
+            search methods. <code>shgo</code> samples the domain in a structured
+            way and can report multiple local minima. <code>direct</code>
+            repeatedly subdivides rectangles, balancing large unexplored regions
+            against regions with promising function values.
+          </p>
+
+          <h3>Use A Population</h3>
+          <p>
+            <code>differential_evolution</code> keeps a population of candidate
+            points. New candidates are made by combining existing points. The
+            failed shortcut it avoids is trusting one trajectory too much: a
+            population can compare several basins at once.
+          </p>
+
+          <h3>Jump Between Basins</h3>
+          <p>
+            <code>dual_annealing</code> uses stochastic moves controlled by a
+            temperature-like schedule, then can polish with local search.
+            <code>basinhopping</code> makes random perturbations and then runs a
+            local minimizer from the perturbed point. These methods are useful
+            when escaping a basin matters more than following one smooth path.
+          </p>
+
           <table class="summary-table">
             <thead>
               <tr>
@@ -138,63 +231,92 @@
           </figure>
         </section>
 
-        <section id="local-traps">
-          <h2>Why Local Search Is Not Enough</h2>
-          <p>
-            A local method can satisfy first-order optimality inside a poor
-            valley. On a many-basin surface, the starting point can matter more
-            than the local solver:
-          </p>
-          <div class="equation-block">
-            \[
-              \nabla f(\hat{x})\approx 0
-              \quad\not\Rightarrow\quad
-              f(\hat{x})=\min_{x\in\Omega} f(x).
-            \]
-          </div>
-          <figure>
-            <img src="../assets/global_local_traps.svg" alt="Local optimizer starts falling into multiple eggholder basins" />
-            <figcaption>
-              Random L-BFGS-B starts land in many different eggholder basins.
-              Global methods are useful when a single local run is too dependent
-              on initialization.
-            </figcaption>
-          </figure>
-        </section>
-
         <section id="scipy">
-          <h2>Using SciPy</h2>
+          <h2>Use Global Optimization In SciPy</h2>
           <p>
             The global optimizers live in <code>scipy.optimize</code>. Most need
-            finite bounds, and several can polish the best point with a local
-            minimizer.
+            finite bounds because their job is to explore a box. Several can
+            polish the best point with a local minimizer after the broad search.
           </p>
           <pre><code>import numpy as np
-from scipy import optimize
+from scipy.optimize import (
+    basinhopping,
+    differential_evolution,
+    direct,
+    dual_annealing,
+    shgo,
+)
 
 def eggholder(x):
+    a = x[1] + 47
+    b = x[0] / 2 + x[1] + 47
+    c = x[0] - a
+    r1 = np.sqrt(abs(b))
+    r2 = np.sqrt(abs(c))
     return (
-        -(x[1] + 47) * np.sin(np.sqrt(abs(x[0] / 2 + x[1] + 47)))
-        - x[0] * np.sin(np.sqrt(abs(x[0] - (x[1] + 47))))
+        -a * np.sin(r1)
+        - x[0] * np.sin(r2)
     )
 
-bounds = [(-512, 512), (-512, 512)]
+bounds = [
+    (-512, 512),
+    (-512, 512),
+]
+diff_evo = differential_evolution
 
-results = {
-    "shgo": optimize.shgo(eggholder, bounds, n=96, iters=2, sampling_method="sobol"),
-    "dual_annealing": optimize.dual_annealing(eggholder, bounds, seed=2),
-    "differential_evolution": optimize.differential_evolution(eggholder, bounds, seed=1),
-    "direct": optimize.direct(eggholder, bounds),
-    "basinhopping": optimize.basinhopping(
-        eggholder,
-        x0=np.array([0.0, 0.0]),
-        minimizer_kwargs={"method": "L-BFGS-B", "bounds": bounds},
-        seed=4,
-    ),
-}
+shgo_result = shgo(
+    eggholder,
+    bounds,
+    n=96,
+    iters=2,
+    sampling_method="sobol",
+)
 
-for name, result in results.items():
-    print(name, result.fun, result.x)</code></pre>
+dual_result = dual_annealing(
+    eggholder,
+    bounds,
+    seed=2,
+)
+
+diff_result = diff_evo(
+    eggholder,
+    bounds,
+    seed=1,
+)
+
+direct_result = direct(
+    eggholder,
+    bounds,
+)
+
+hop_result = basinhopping(
+    eggholder,
+    x0=np.array([0.0, 0.0]),
+    minimizer_kwargs={
+        "method": "L-BFGS-B",
+        "bounds": bounds,
+    },
+    seed=4,
+)
+
+results = [
+    ("shgo", shgo_result),
+    ("dual", dual_result),
+    ("diff_evo", diff_result),
+    ("direct", direct_result),
+    ("basinhopping", hop_result),
+]
+
+for name, result in results:
+    value = result.fun
+    point = result.x
+    print(name, value, point)</code></pre>
+          <p>
+            A stochastic method's seed controls one run, not mathematical
+            certainty. For important black-box problems, compare several seeds,
+            inspect the best basins, and then polish or validate the finalists
+            with domain-specific checks.
+          </p>
         </section>
 
         <section id="when">
@@ -212,30 +334,35 @@ for name, result in results.items():
                 <td>The surface is smooth, convex-like, or already near a good basin.</td>
               </tr>
               <tr>
-                <td>Function evaluations are expensive but a wrong basin is even more expensive.</td>
+                <td>Function evaluations are expensive, but a wrong basin is even more expensive.</td>
                 <td>You need fast refinement after a good initial point is known.</td>
               </tr>
               <tr>
                 <td>You can afford multiple searches, stochastic seeds, or deterministic space coverage.</td>
                 <td>The dimension is high enough that broad space exploration becomes impractical.</td>
               </tr>
+              <tr>
+                <td>You need evidence about competing basins, not just one local optimum.</td>
+                <td>You need proof for a convex or structured problem; use the solver family that matches that structure.</td>
+              </tr>
             </tbody>
           </table>
           <div class="callout">
-            Practical habit: use global optimization to identify promising basins,
-            then inspect the best solutions with local minimizers and domain
-            constraints. The result object is evidence, not a proof of globality.
+            Practical habit: use global optimization to identify promising
+            basins, then inspect the best solutions with local minimizers and
+            domain constraints. The result object is evidence, not a proof of
+            globality.
           </div>
         </section>
       </article>
 
       <aside class="toc" aria-label="global optimization sections">
         <strong>On this page</strong>
-        <a href="#idea">Core idea</a>
-        <a href="#eggholder">Eggholder landscape</a>
-        <a href="#families">Optimizer families</a>
+        <a href="#idea">Many basins</a>
+        <a href="#eggholder">Eggholder</a>
         <a href="#local-traps">Local traps</a>
-        <a href="#scipy">Using SciPy</a>
+        <a href="#families">Search families</a>
+        <a href="#scipy">SciPy usage</a>
         <a href="#when">When to use it</a>
       </aside>
     </main>

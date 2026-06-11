@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Root Finding</title>
+    <title>Root Finding Tutorial</title>
     <link rel="stylesheet" href="../styles.css" />
     <script>
       window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
@@ -14,11 +14,11 @@
     <header class="site-header">
       <div class="page">
         <p class="kicker">Zeros, fixed points, and nonlinear systems</p>
-        <h1>Root finding</h1>
+        <h1>Root finding tutorial</h1>
         <p class="lede">
-          Root finding solves equations directly. Instead of minimizing a scalar
-          score, the goal is to make a scalar function or residual vector equal
-          to zero.
+          Root finding solves equations directly. Instead of asking which point
+          makes a score smallest, it asks which point makes a scalar function or
+          residual vector equal to zero.
         </p>
         <nav class="nav-row" aria-label="Page navigation">
           <a class="pill" href="../index.html">Overview</a>
@@ -36,9 +36,11 @@
     <main class="page content">
       <article>
         <section id="idea">
-          <h2>Core Idea</h2>
+          <h2>From Minimizing To Solving</h2>
           <p>
-            For a scalar function, root finding solves
+            In minimization, success means the objective value cannot be improved
+            nearby. In root finding, success means an equation is satisfied. For
+            a scalar function, the target is a number \(x^\star\) where
           </p>
           <div class="equation-block">
             \[
@@ -46,34 +48,93 @@
             \]
           </div>
           <p>
-            For systems, the unknown is a vector and every component of the
-            residual must vanish:
+            For a system, the unknown \(x\) is a vector and every residual
+            component must vanish at the same time:
           </p>
           <div class="equation-block">
             \[
-              F(x^\star)=0,\qquad F:\mathbb{R}^n\to\mathbb{R}^n.
+            \begin{aligned}
+              F(x^\star)&=0,\\
+              F:\mathbb{R}^n&\to\mathbb{R}^n.
+            \end{aligned}
             \]
           </div>
           <p>
-            This is related to optimization, but not identical. Minimizing
-            \(\|F(x)\|^2\) can be useful, yet root solvers exploit equation
-            structure more directly.
+            A tempting shortcut is to minimize \(\|F(x)\|_2^2\) and call the
+            minimizer a root. Sometimes that is useful. But a small minimum of
+            \(\|F(x)\|_2^2\) is not the same promise as \(F(x)=0\), and root
+            solvers can use equation structure directly.
           </p>
+          <div class="callout">
+            Mental model: optimization asks for the bottom of a landscape. Root
+            finding asks where a curve, surface, or residual vector crosses zero.
+          </div>
         </section>
 
         <section id="scalar">
-          <h2>Scalar Functions</h2>
+          <h2>Scalar Roots Start With Signs</h2>
           <p>
-            Bracketed scalar methods use a sign change
-            \(f(a)f(b)<0\), which gives strong safety guarantees for continuous
-            functions. Newton-style methods use derivatives and can move faster
-            when the initial guess is good:
+            The safest scalar root-finding information is a sign-changing
+            bracket. Suppose \(f\) is continuous on an interval from \(a\) to
+            \(b\). If the endpoint signs differ, then the curve must cross zero
+            somewhere inside:
           </p>
           <div class="equation-block">
             \[
-              x_{k+1}=x_k-\frac{f(x_k)}{f'(x_k)}.
+            \begin{aligned}
+              f(a)f(b)&\lt 0,\\
+              \text{so some }x^\star
+              &\in (a,b)
+              \text{ has }f(x^\star)=0.
+            \end{aligned}
             \]
           </div>
+          <p>
+            That guarantee is why bracketed methods such as
+            <code>brentq</code>, <code>bisect</code>, and
+            <code>toms748</code> are the reliability tools. They do not need a
+            derivative. They need a continuous scalar function and a bracket
+            whose endpoints have opposite signs.
+          </p>
+          <p>
+            The failed shortcut is to look only for a small value of
+            \(|f(x)|\) at one point. That may be close to a root, but it does not
+            prove that a zero crossing has been enclosed.
+          </p>
+        </section>
+
+        <section id="newton">
+          <h2>Newton Uses A Tangent</h2>
+          <p>
+            If a derivative is available, Newton's method tries to jump to the
+            zero of the local tangent line. At the current point \(x_k\), the
+            tangent model is
+          </p>
+          <div class="equation-block">
+            \[
+              f(x_k+p)\approx f(x_k)+f'(x_k)p.
+            \]
+          </div>
+          <p>
+            To make the model equal zero, solve for the scalar step \(p\):
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              f(x_k)+f'(x_k)p&=0,\\
+              p&=-\frac{f(x_k)}{f'(x_k)},\\
+              x_{k+1}
+              &=x_k-\frac{f(x_k)}{f'(x_k)}.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            Meaning: Newton can move fast when the tangent is a good local
+            model. The catch is also visible in the formula. If the derivative
+            is tiny, noisy, or points toward the wrong local behavior, the step
+            can be poor. That is why bracketed scalar methods are often better
+            when reliability matters more than speed.
+          </p>
           <figure>
             <img src="../assets/root_scalar_methods.svg" alt="Scalar root finding with brentq and Newton evaluations" />
             <figcaption>
@@ -85,21 +146,35 @@
         </section>
 
         <section id="systems">
-          <h2>Sets of Equations</h2>
+          <h2>Systems Need Every Residual To Vanish</h2>
           <p>
-            The tutorial's system example solves two equations in two unknowns:
+            For a vector system, each component is its own equation. The
+            tutorial's two-variable example is
           </p>
           <div class="equation-block">
             \[
-              \begin{aligned}
-                x_0\cos(x_1)&=4,\\
-                x_0x_1-x_1&=5.
-              \end{aligned}
+            \begin{aligned}
+              F_0(x)&=x_0\cos(x_1)-4,\\
+              F_1(x)&=x_0x_1-x_1-5.
+            \end{aligned}
             \]
           </div>
           <p>
-            Geometrically, the root is where the zero-contours of the residual
-            components intersect.
+            The root is not where just one equation is satisfied. It is where
+            both components are zero:
+          </p>
+          <div class="equation-block">
+            \[
+              F_0(x^\star)=0,
+              \qquad
+              F_1(x^\star)=0.
+            \]
+          </div>
+          <p>
+            Geometrically, each residual component has a zero-contour. A
+            two-equation root is the point where those two zero-contours
+            intersect. In higher dimensions, the same idea becomes harder to see,
+            but the residual-vector requirement is the same.
           </p>
           <figure>
             <img src="../assets/root_system_contours.svg" alt="Two-equation nonlinear system root shown as intersecting residual contours" />
@@ -110,38 +185,100 @@
           </figure>
         </section>
 
-        <section id="fixed-point">
-          <h2>Fixed Points</h2>
+        <section id="jacobian">
+          <h2>The System Jacobian Is The Local Map</h2>
           <p>
-            A fixed point solves \(g(x)=x\). SciPy's
-            <code>fixed_point</code> works directly with this form, while a root
-            solver can handle the equivalent residual:
+            For systems, the derivative becomes a Jacobian matrix. Its entry
+            \(J_{ij}\) says how residual \(F_i\) changes when parameter \(x_j\)
+            changes:
           </p>
           <div class="equation-block">
             \[
-              g(x)-x=0.
+              J_{ij}(x)
+              =
+              \frac{\partial F_i}{\partial x_j}(x).
             \]
           </div>
           <p>
-            In practice, fixed-point iteration is attractive when the problem is
-            naturally written as an update rule, and a root solver is attractive
-            when the residual and Jacobian are the clearer objects.
+            Newton's system step uses a local linear model:
+          </p>
+          <div class="equation-block">
+            \[
+              F(x+p)\approx F(x)+J(x)p.
+            \]
+          </div>
+          <p>
+            Set that model to zero and solve a linear system for \(p\):
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              J(x_k)p_k&=-F(x_k),\\
+              x_{k+1}&=x_k+p_k.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            That is the system version of the scalar Newton formula. Instead of
+            dividing by \(f'(x_k)\), we solve with the Jacobian. In multiple
+            dimensions, "divide by the derivative" is not a meaningful shortcut.
+          </p>
+        </section>
+
+        <section id="fixed-point">
+          <h2>Fixed Points Are Roots In Disguise</h2>
+          <p>
+            A fixed point solves
+          </p>
+          <div class="equation-block">
+            \[
+              g(x^\star)=x^\star.
+            \]
+          </div>
+          <p>
+            This is useful when the problem naturally describes an update rule:
+            feed in \(x\), compute a new value \(g(x)\), and look for the point
+            that no longer changes. The same condition can also be written as a
+            root:
+          </p>
+          <div class="equation-block">
+            \[
+              h(x)=g(x)-x,
+              \qquad
+              h(x^\star)=0.
+            \]
+          </div>
+          <p>
+            Use <code>fixed_point</code> when the update form is the clearest
+            object. Use a root solver when the residual \(g(x)-x\), a bracket, or
+            a Jacobian gives the clearer numerical problem.
           </p>
         </section>
 
         <section id="large">
-          <h2>Large Nonlinear Systems</h2>
+          <h2>Large Systems Need A Different Cost Model</h2>
           <p>
-            For high-dimensional residuals, forming and factoring a dense
-            Jacobian is often the wrong cost model. Krylov root methods use
-            matrix-vector products and can accept a preconditioner \(M\) that
-            approximately applies \(J^{-1}\):
+            On a small dense system, forming a Jacobian and solving a linear
+            system may be fine. On a large sparse or matrix-free system, the
+            expensive operation is often the residual evaluation or the action of
+            the Jacobian on a vector.
+          </p>
+          <p>
+            Krylov root methods are inexact Newton methods. They do not need a
+            full dense inverse Jacobian. Instead, they build approximate Newton
+            directions from matrix-vector information. A preconditioner \(M\)
+            helps when it behaves like an inexpensive approximate inverse:
           </p>
           <div class="equation-block">
             \[
-              M \approx J(x)^{-1}.
+              M\approx J(x)^{-1}.
             \]
           </div>
+          <p>
+            The point of \(M\) is not to solve the whole nonlinear problem. It is
+            to make each inner linear solve easier, so the outer root finder
+            needs fewer expensive residual calls.
+          </p>
           <figure>
             <img src="../assets/root_krylov_preconditioning.svg" alt="Krylov root solution field and residual evaluation count with and without preconditioning" />
             <figcaption>
@@ -153,30 +290,75 @@
         </section>
 
         <section id="scipy">
-          <h2>Using SciPy</h2>
+          <h2>Use Root Finding In SciPy</h2>
           <p>
-            Use scalar root routines when the unknown is one-dimensional, and
-            <code>root</code> when the residual is vector-valued.
+            Use <code>root_scalar</code> when the unknown is one number. Use
+            <code>root</code> when the residual is vector-valued. Use
+            <code>fixed_point</code> when the problem is naturally an update rule.
           </p>
           <pre><code>import numpy as np
-from scipy.optimize import root, root_scalar
+from scipy import optimize as opt
 
 def f(x):
     return x + 2.0 * np.cos(x)
 
-def fp(x):
+def df(x):
     return 1.0 - 2.0 * np.sin(x)
 
-safe = root_scalar(f, bracket=(-2.0, 0.0), method="brentq")
-fast = root_scalar(f, x0=0.25, fprime=fp, method="newton")
+safe = opt.root_scalar(
+    f,
+    bracket=(-2.0, 0.0),
+    method="brentq",
+)
+
+fast = opt.root_scalar(
+    f,
+    x0=-0.5,
+    fprime=df,
+    method="newton",
+)
 
 def F(x):
-    return np.array([x[0] * np.cos(x[1]) - 4.0, x[0] * x[1] - x[1] - 5.0])
+    x0, x1 = x
+    return np.array([
+        x0 * np.cos(x1) - 4.0,
+        x0 * x1 - x1 - 5.0,
+    ])
 
 def J(x):
-    return np.array([[np.cos(x[1]), -x[0] * np.sin(x[1])], [x[1], x[0] - 1.0]])
+    x0, x1 = x
+    row0 = [
+        np.cos(x1),
+        -x0 * np.sin(x1),
+    ]
+    row1 = [x1, x0 - 1.0]
+    return np.array([row0, row1])
 
-system = root(F, x0=np.array([1.0, 1.0]), jac=J)</code></pre>
+system = opt.root(
+    F,
+    x0=np.array([1.0, 1.0]),
+    jac=J,
+    method="hybr",
+)
+
+def g(x):
+    return np.cos(x)
+
+fixed = opt.fixed_point(
+    g,
+    x0=0.5,
+)
+
+print(safe.root, safe.converged)
+print(fast.root, fast.converged)
+print(system.x, system.success)
+print(fixed)</code></pre>
+          <p>
+            The scalar result reports <code>root</code> and
+            <code>converged</code>. The vector result reports <code>x</code>,
+            <code>fun</code>, and <code>success</code>. Always inspect the final
+            residual, not just the success flag.
+          </p>
         </section>
 
         <section id="when">
@@ -192,18 +374,23 @@ system = root(F, x0=np.array([1.0, 1.0]), jac=J)</code></pre>
             <tbody>
               <tr>
                 <td>Scalar equation with a sign change</td>
-                <td><code>root_scalar</code>, <code>brentq</code>, <code>bisect</code></td>
+                <td><code>root_scalar</code>, <code>brentq</code>, <code>bisect</code>, <code>toms748</code></td>
                 <td>Prefer a bracket when reliability matters.</td>
               </tr>
               <tr>
                 <td>Scalar equation with derivatives</td>
-                <td><code>newton</code>, <code>root_scalar(method="newton")</code></td>
-                <td>Check sensitivity to the initial guess.</td>
+                <td><code>root_scalar(method="newton")</code>, <code>secant</code>, <code>halley</code></td>
+                <td>Check sensitivity to the initial guess and derivative quality.</td>
               </tr>
               <tr>
                 <td>Vector residual system</td>
-                <td><code>root</code></td>
+                <td><code>root</code> with <code>hybr</code>, <code>lm</code>, or Broyden-style methods</td>
                 <td>Scale residual components and provide a Jacobian when possible.</td>
+              </tr>
+              <tr>
+                <td>Fixed-point update rule</td>
+                <td><code>fixed_point</code> or a root solver on <code>g(x)-x</code></td>
+                <td>Use the form that makes convergence and residual size easiest to inspect.</td>
               </tr>
               <tr>
                 <td>Large sparse or matrix-free system</td>
@@ -221,12 +408,14 @@ system = root(F, x0=np.array([1.0, 1.0]), jac=J)</code></pre>
 
       <aside class="toc" aria-label="root finding sections">
         <strong>On this page</strong>
-        <a href="#idea">Core idea</a>
-        <a href="#scalar">Scalar functions</a>
+        <a href="#idea">Solving vs minimizing</a>
+        <a href="#scalar">Scalar brackets</a>
+        <a href="#newton">Newton</a>
         <a href="#systems">Systems</a>
+        <a href="#jacobian">Jacobians</a>
         <a href="#fixed-point">Fixed points</a>
         <a href="#large">Large systems</a>
-        <a href="#scipy">Using SciPy</a>
+        <a href="#scipy">SciPy usage</a>
         <a href="#when">When to use it</a>
       </aside>
     </main>

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Constrained Minimization</title>
+    <title>Constrained Minimization Tutorial</title>
     <link rel="stylesheet" href="../styles.css" />
     <script>
       window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
@@ -14,12 +14,13 @@
     <header class="site-header">
       <div class="page">
         <p class="kicker">Local minimization with constraints</p>
-        <h1>Constrained minimization</h1>
+        <h1>Constrained minimization tutorial</h1>
         <p class="lede">
-          Constrained local minimizers optimize a scalar objective while
-          respecting bounds, equalities, and inequalities. In the SciPy tutorial,
-          <code>trust-constr</code> uses object-style constraints, while
-          <code>SLSQP</code> uses the classic dictionary constraint interface.
+          Constrained minimization keeps the local-search goal of reducing a
+          scalar objective, but every step must also respect bounds, equalities,
+          and inequalities. This tutorial explains the feasible-set idea first,
+          then shows how <code>trust-constr</code> and <code>SLSQP</code> encode
+          the same constrained Rosenbrock problem in SciPy.
         </p>
         <nav class="nav-row" aria-label="Page navigation">
           <a class="pill" href="../index.html">Overview</a>
@@ -38,47 +39,102 @@
     <main class="page content">
       <article>
         <section id="idea">
-          <h2>Core Idea</h2>
+          <h2>From Unconstrained To Feasible</h2>
           <p>
-            A constrained minimization problem adds feasible-set geometry to the
-            usual scalar objective:
+            In an unconstrained problem, a step is judged mostly by whether it
+            lowers the objective \(f(x)\). In a constrained problem, lowering the
+            objective is not enough. The point must also be feasible, meaning it
+            satisfies the rules of the problem.
+          </p>
+          <p>
+            Start with a current point \(x\). The objective \(f(x)\) is still the
+            scalar value you want to make small. Bounds restrict each variable
+            directly. Constraint functions \(c(x)\) describe extra quantities
+            that must stay between lower and upper limits:
           </p>
           <div class="equation-block">
             \[
-              \begin{aligned}
-                \min_x\quad & f(x) \\
-                \text{subject to}\quad
-                & c^{\ell}\leq c(x)\leq c^{u},\\
-                & x^{\ell}\leq x\leq x^{u}.
-              \end{aligned}
+            \begin{aligned}
+              \min_x\quad & f(x),\\
+              c^\ell &\leq c(x)\leq c^u,\\
+              x^\ell &\leq x\leq x^u.
+            \end{aligned}
             \]
           </div>
           <p>
-            The optimizer must reduce the objective and drive constraint
-            violation toward zero. This changes the meaning of a good step:
-            moving downhill is not useful if the step leaves the feasible set in
-            a way the method cannot repair.
+            The new object is the feasible set: all \(x\) values that satisfy
+            those bounds and constraints. A good constrained step must improve
+            the objective while staying in, or moving back toward, that feasible
+            set.
+          </p>
+          <div class="callout">
+            Mental model: unconstrained minimization asks "which point is low?"
+            Constrained minimization asks "which feasible point is low?"
+          </div>
+        </section>
+
+        <section id="constraints">
+          <h2>How To Read Constraints</h2>
+          <p>
+            Bounds, inequalities, and equalities look similar in code, but they
+            play different roles.
+          </p>
+          <p>
+            A bound is a direct limit on one coordinate:
+          </p>
+          <div class="equation-block">
+            \[
+              0\leq x_0\leq 1.
+            \]
+          </div>
+          <p>
+            An inequality leaves room. For example, \(x_0+2x_1\leq 1\) allows
+            every point on one side of a line:
+          </p>
+          <div class="equation-block">
+            \[
+              x_0+2x_1\leq 1.
+            \]
+          </div>
+          <p>
+            An equality removes more freedom. The condition \(2x_0+x_1=1\)
+            forces the solution to lie exactly on a line:
+          </p>
+          <div class="equation-block">
+            \[
+              2x_0+x_1=1.
+            \]
+          </div>
+          <p>
+            The tempting shortcut is to ignore the constraints, minimize the
+            objective, and then project the answer back into the allowed region.
+            That can fail because the best feasible point is usually not the
+            projection of the unconstrained minimum. The constraint geometry and
+            the objective geometry have to be considered together.
           </p>
         </section>
 
         <section id="tutorial-problem">
-          <h2>Tutorial Problem</h2>
+          <h2>The Tutorial Problem</h2>
           <p>
-            SciPy's constrained examples reuse the two-variable Rosenbrock
-            function with a mixture of linear, nonlinear, equality, inequality,
-            and bound constraints:
+            The SciPy constrained examples use the two-variable Rosenbrock
+            objective. By itself, Rosenbrock wants to reach the valley minimum
+            near \((1,1)\). The constraints below change the question: among the
+            points that obey the line, curve, and bound rules, which one has the
+            lowest Rosenbrock value?
           </p>
           <div class="equation-block">
             \[
-              \begin{aligned}
-                \min_{x_0,x_1}\quad
-                &100(x_1-x_0^2)^2+(1-x_0)^2\\
-                \text{subject to}\quad
-                &x_0+2x_1\leq1,\\
-                &x_0^2+x_1\leq1,\qquad x_0^2-x_1\leq1,\\
-                &2x_0+x_1=1,\\
-                &0\leq x_0\leq1,\qquad -0.5\leq x_1\leq2.
-              \end{aligned}
+            \begin{aligned}
+              \min_{x_0,x_1}\quad
+              &100(x_1-x_0^2)^2+(1-x_0)^2,\\
+              x_0+2x_1&\leq1,\\
+              x_0^2+x_1&\leq1,\\
+              x_0^2-x_1&\leq1,\\
+              2x_0+x_1&=1,\\
+              0\leq x_0&\leq1,\\
+              -0.5\leq x_1&\leq2.
+            \end{aligned}
             \]
           </div>
           <figure>
@@ -86,20 +142,35 @@
             <figcaption>
               The equality constraint collapses feasibility to a line segment.
               Both constrained methods must approach the low Rosenbrock valley
-              while respecting the feasible geometry.
+              while respecting that feasible geometry.
             </figcaption>
           </figure>
+          <p>
+            Meaning: the optimizer is not free to chase the lowest contour
+            anywhere in the plane. It must search along the feasible geometry
+            carved out by the constraints.
+          </p>
         </section>
 
         <section id="methods">
-          <h2>trust-constr and SLSQP</h2>
+          <h2>trust-constr And SLSQP</h2>
           <p>
-            <code>trust-constr</code> is the most expressive constrained local
-            optimizer in <code>minimize</code>: it supports bounds, linear and
-            nonlinear constraints, sparse derivatives, and second-order
-            information. <code>SLSQP</code> solves sequential quadratic
-            approximations and is compact for smaller smooth constrained
-            problems.
+            SciPy offers several constrained local optimizers. The tutorial
+            contrast here is between <code>trust-constr</code> and
+            <code>SLSQP</code>.
+          </p>
+          <p>
+            <code>trust-constr</code> is the more expressive modern interface. It
+            uses <code>Bounds</code>, <code>LinearConstraint</code>, and
+            <code>NonlinearConstraint</code> objects. That object-style interface
+            lets you name the lower and upper limits for each constraint and
+            provide derivatives when the problem needs them.
+          </p>
+          <p>
+            <code>SLSQP</code> is an SQP-style method with a compact dictionary
+            interface. It repeatedly solves quadratic approximations to the
+            constrained problem. For smaller smooth problems, the dictionary
+            style is often convenient.
           </p>
           <table class="summary-table">
             <thead>
@@ -136,14 +207,31 @@
           <h2>Constraint Slack</h2>
           <p>
             Inequality constraints are often easiest to audit through slack.
-            Positive slack means the constraint is satisfied; zero slack means
-            the constraint is active:
+            Suppose a constraint says \(c_j(x)\leq c_j^u\). The slack is the
+            unused room before the upper limit:
           </p>
           <div class="equation-block">
             \[
-              s_j(x)=c_j^{u}-c_j(x)\geq0.
+              s_j(x)=c_j^u-c_j(x).
             \]
           </div>
+          <p>
+            Now the sign has a clear meaning:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              s_j(x)>0 &\quad \text{constraint has room},\\
+              s_j(x)=0 &\quad \text{constraint is active},\\
+              s_j(x)<0 &\quad \text{constraint is violated}.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            This is a useful failed-shortcut check. If the objective value looks
+            good but one slack is negative, the optimizer has not solved the
+            constrained problem yet. It has found a low infeasible point.
+          </p>
           <figure>
             <img src="../assets/constrained_constraint_slack.svg" alt="Constraint slack values at the constrained Rosenbrock solution" />
             <figcaption>
@@ -155,11 +243,11 @@
         </section>
 
         <section id="scipy">
-          <h2>Using SciPy</h2>
+          <h2>Use Constrained Minimization In SciPy</h2>
           <p>
-            The same problem can be represented with modern constraint objects
-            for <code>trust-constr</code>, or with dictionary constraints for
-            <code>SLSQP</code>.
+            The same mathematical problem can be represented with modern
+            constraint objects for <code>trust-constr</code>, or with dictionary
+            constraints for <code>SLSQP</code>.
           </p>
           <pre><code>import numpy as np
 from scipy.optimize import Bounds, LinearConstraint, NonlinearConstraint, minimize
@@ -174,16 +262,24 @@ def rosen_der(x):
     ])
 
 bounds = Bounds([0.0, -0.5], [1.0, 2.0])
-linear = LinearConstraint([[1.0, 2.0], [2.0, 1.0]], [-np.inf, 1.0], [1.0, 1.0])
+
+linear = LinearConstraint(
+    [[1.0, 2.0], [2.0, 1.0]],
+    [-np.inf, 1.0],
+    [1.0, 1.0],
+)
+
 nonlinear = NonlinearConstraint(
     lambda x: np.array([x[0]**2 + x[1], x[0]**2 - x[1]]),
     [-np.inf, -np.inf],
     [1.0, 1.0],
 )
 
+x0 = np.array([0.5, 0.0])
+
 trust = minimize(
     rosen,
-    x0=np.array([0.5, 0.0]),
+    x0=x0,
     method="trust-constr",
     jac=rosen_der,
     constraints=[linear, nonlinear],
@@ -198,16 +294,30 @@ ineq_cons = {
         1.0 - x[0]**2 + x[1],
     ]),
 }
-eq_cons = {"type": "eq", "fun": lambda x: np.array([2.0 * x[0] + x[1] - 1.0])}
+
+eq_cons = {
+    "type": "eq",
+    "fun": lambda x: np.array([2.0 * x[0] + x[1] - 1.0]),
+}
 
 slsqp = minimize(
     rosen,
-    x0=np.array([0.5, 0.0]),
+    x0=x0,
     method="SLSQP",
     jac=rosen_der,
     constraints=[eq_cons, ineq_cons],
     bounds=[(0.0, 1.0), (-0.5, 2.0)],
-)</code></pre>
+)
+
+print(trust.x, trust.fun)
+print(slsqp.x, slsqp.fun)</code></pre>
+          <p>
+            The sign convention differs by interface. In
+            <code>LinearConstraint</code> and <code>NonlinearConstraint</code>,
+            you give lower and upper bounds directly. In an
+            <code>SLSQP</code> inequality dictionary, the function should be
+            nonnegative when the constraint is satisfied.
+          </p>
         </section>
 
         <section id="when">
@@ -244,11 +354,12 @@ slsqp = minimize(
 
       <aside class="toc" aria-label="constrained minimization sections">
         <strong>On this page</strong>
-        <a href="#idea">Core idea</a>
+        <a href="#idea">Feasible set</a>
+        <a href="#constraints">Constraint types</a>
         <a href="#tutorial-problem">Tutorial problem</a>
         <a href="#methods">Methods</a>
         <a href="#slack">Constraint slack</a>
-        <a href="#scipy">Using SciPy</a>
+        <a href="#scipy">SciPy usage</a>
         <a href="#when">When to use it</a>
       </aside>
     </main>

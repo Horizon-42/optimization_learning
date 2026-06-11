@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Trust-Krylov Algorithm</title>
+    <title>trust-krylov Tutorial</title>
     <link rel="stylesheet" href="../styles.css" />
     <script>
       window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
@@ -14,12 +14,13 @@
     <header class="site-header">
       <div class="page">
         <p class="kicker">Krylov trust-region minimization</p>
-        <h1>Trust-Region Truncated Generalized Lanczos / Conjugate Gradient algorithm</h1>
+        <h1>trust-krylov tutorial</h1>
         <p class="lede">
-          trust-krylov solves the same trust-region Newton subproblem as
-          trust-ncg, but solves it more accurately inside a Krylov subspace. It is
-          especially useful when Hessian-vector products are cheap and curvature
-          is difficult or indefinite.
+          trust-krylov starts from the same trust-region model as trust-ncg, but
+          spends more inner work to solve that model more accurately in a small
+          Krylov subspace. It is the matrix-free trust-region method to try when
+          curvature is hard, indefinite, or worth a few extra Hessian-vector
+          products.
         </p>
         <nav class="nav-row" aria-label="Page navigation">
           <a class="pill" href="../index.html">Overview</a>
@@ -36,92 +37,180 @@
     <main class="page content">
       <article>
         <section id="idea">
-          <h2>Core Idea</h2>
+          <h2>From trust-ncg To trust-krylov</h2>
           <p>
-            trust-krylov uses the same local quadratic model and trust radius:
+            trust-ncg already gave us the trust-region idea: build a quadratic
+            model near \(x_k\), restrict the step to a radius \(\Delta_k\), and
+            accept the step only when the model predicts the real objective well.
+            The model is
           </p>
           <div class="equation-block">
             \[
-              \min_{p}
+            \begin{aligned}
               m_k(p)
-              =
-              f(x_k)+g_k^\mathsf{T}p+\frac{1}{2}p^\mathsf{T}H_kp
-              \quad
-              \text{subject to}
-              \quad
-              \|p\|\leq\Delta_k.
+              &=
+              f(x_k)+g_k^\mathsf{T}p\\
+              &\quad+\frac{1}{2}p^\mathsf{T}H_kp,\\
+              \|p\|&\leq\Delta_k.
+            \end{aligned}
             \]
           </div>
           <p>
-            The difference is how the subproblem is solved. Instead of using a
-            truncated CG step alone, trust-krylov solves the subproblem in a
-            growing Krylov subspace:
+            Here \(p\) is the proposed movement away from \(x_k\), \(g_k\) is
+            the gradient, and \(H_k\) is the Hessian or Hessian-vector product
+            operator. trust-ncg uses truncated conjugate gradients to find a good
+            enough step inside the ball. It can stop early when the residual is
+            small, when the boundary is reached, or when non-positive curvature
+            appears.
           </p>
-          <div class="equation-block">
-            \[
-              \mathcal{K}_m(H_k,g_k)
-              =
-              \operatorname{span}\{g_k,H_kg_k,H_k^2g_k,\ldots,H_k^{m-1}g_k\}.
-            \]
+          <p>
+            The natural shortcut is to solve the whole trust-region subproblem
+            almost exactly. That would give the most careful model step, but it
+            usually requires dense Hessian linear algebra. trust-krylov takes the
+            middle path: do not solve the full \(n\)-dimensional problem, but do
+            solve a richer small problem built from Hessian-vector products.
+          </p>
+          <div class="callout">
+            Mental model: trust-ncg asks for a cheap, useful trust-region step.
+            trust-krylov asks for a more accurate trust-region step in the
+            subspace that the current gradient and Hessian products have revealed.
           </div>
         </section>
 
         <section id="subspace">
-          <h2>Krylov Subspace Solve</h2>
+          <h2>What A Krylov Subspace Means</h2>
           <p>
-            Inside the subspace, the large Hessian is represented by a much
-            smaller projected matrix. The GLTR idea is to solve the trust-region
-            problem accurately in that low-dimensional space:
+            Start with the gradient direction \(g_k\). Apply the Hessian once and
+            you learn how curvature bends that direction: \(H_kg_k\). Apply it
+            again and you learn the next layer of curvature:
+            \(H_k^2g_k\). The Krylov subspace is the span of the directions you
+            can build from that repeated product pattern:
           </p>
           <div class="equation-block">
             \[
-              p_m=Z_my_m,
-              \qquad
-              \min_{\|y\|\leq\Delta_k}
-              g_m^\mathsf{T}y+\frac{1}{2}y^\mathsf{T}T_my,
-              \qquad
-              T_m=Z_m^\mathsf{T}H_kZ_m.
+            \begin{aligned}
+              \mathcal{K}_m(H_k,g_k)
+              &=
+              \operatorname{span}\{g_k,H_kg_k,\ldots,\\
+              &\qquad H_k^{m-1}g_k\}.
+            \end{aligned}
             \]
           </div>
+          <p>
+            This does not mean SciPy literally forms powers of \(H_k\). That
+            would be unstable and wasteful. The practical routine builds an
+            orthonormal basis for the same growing information space using
+            Hessian-vector products. Call that basis matrix \(Z_m\). Its columns
+            are the \(m\) directions the inner solver is willing to combine.
+          </p>
+          <p>
+            Why not just keep taking more truncated-CG steps? Sometimes that is
+            enough. But when the model is indefinite or the boundary is important,
+            a richer subspace lets the algorithm compare more combinations of
+            useful directions instead of accepting the first boundary exit.
+          </p>
+        </section>
+
+        <section id="projected">
+          <h2>The Smaller Problem Inside</h2>
+          <p>
+            Once \(Z_m\) is available, trust-krylov does not choose the large
+            step \(p\) directly. It chooses a smaller coordinate vector \(y\).
+            The full step is reconstructed as
+          </p>
+          <div class="equation-block">
+            \[
+              p_m=Z_my.
+            \]
+          </div>
+          <p>
+            This is the key distinction: \(p_m\) lives in the original parameter
+            space, while \(y\) only says how much of each Krylov basis direction
+            to mix. If \(m\) is small, solving for \(y\) is much cheaper than
+            solving for every coordinate of \(p\).
+          </p>
+          <p>
+            Projecting the model means rewriting the large quadratic in those
+            small coordinates. The projected gradient is \(g_m=Z_m^\mathsf{T}g_k\).
+            The projected Hessian is
+            \(T_m=Z_m^\mathsf{T}H_kZ_m\). Then the subproblem becomes
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \min_{\|y\|\leq\Delta_k}
+              &\quad
+              g_m^\mathsf{T}y+\frac{1}{2}y^\mathsf{T}T_my,\\
+              g_m&=Z_m^\mathsf{T}g_k,\\
+              T_m&=Z_m^\mathsf{T}H_kZ_m.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            The scalar-looking radius did not disappear. Because the columns of
+            \(Z_m\) are orthonormal, \(\|Z_my\|=\|y\|\), so the same trust radius
+            can constrain the smaller projected problem.
+          </p>
           <figure>
             <img src="../assets/trust_krylov_subspace_progress.svg" alt="Krylov subspace trust-region improvement by dimension" />
             <figcaption>
-              As the Krylov subspace grows, the projected trust-region step
-              approaches the full-space model step. Extra Hessian-vector products
-              buy a more accurate subproblem solution.
-            </figcaption>
-          </figure>
-          <figure>
-            <img src="../assets/trust_krylov_indefinite_model.svg" alt="Indefinite trust-region model with negative curvature" />
-            <figcaption>
-              For indefinite models, the useful direction can be a boundary step
-              along negative curvature. Krylov methods are good at exposing that
-              curvature without dense Hessian factorizations.
+              As the Krylov subspace grows, the projected trust-region step gets
+              a larger menu of curvature-aware directions. Extra Hessian-vector
+              products buy a more accurate subproblem solution.
             </figcaption>
           </figure>
         </section>
 
-        <section id="rosenbrock">
-          <h2>Rosenbrock Example</h2>
+        <section id="indefinite">
+          <h2>Why It Helps With Indefinite Curvature</h2>
           <p>
-            On Rosenbrock, trust-krylov can use the full Hessian or just Hessian
-            products. The Hessian-vector product interface keeps the method
-            suitable for large-scale problems:
+            A positive-definite Hessian makes the quadratic model a bowl. An
+            indefinite Hessian means at least one direction bends downward.
+            Without a trust radius, that model can keep decreasing along the
+            negative-curvature direction and never have a finite minimizer.
           </p>
-          <div class="equation-block">
-            \[
-              H_kv
-              \quad\text{is enough to build}\quad
-              \mathcal{K}_m(H_k,g_k).
-            \]
-          </div>
+          <p>
+            The tempting shortcut is to "fix" the Hessian by ignoring negative
+            curvature. That can throw away useful information. If the objective
+            is currently sitting on a saddle-like model, negative curvature may
+            be exactly the escape route.
+          </p>
+          <p>
+            trust-krylov keeps the negative-curvature information, but the radius
+            keeps it controlled. Inside the small projected problem, the method
+            can balance two forces: the gradient wants to reduce first-order
+            slope, and negative curvature may make a boundary step attractive.
+          </p>
+          <figure>
+            <img src="../assets/trust_krylov_indefinite_model.svg" alt="Indefinite trust-region model with negative curvature" />
+            <figcaption>
+              For indefinite models, the useful step can be a boundary step along
+              negative curvature. Krylov methods expose that curvature with
+              Hessian-vector products instead of dense Hessian factorizations.
+            </figcaption>
+          </figure>
+          <p>
+            Meaning: trust-krylov is not more robust because it ignores difficult
+            curvature. It is more robust because it gives the trust-region
+            subproblem a better low-dimensional view of that curvature.
+          </p>
+        </section>
+
+        <section id="rosenbrock">
+          <h2>Watch It On Rosenbrock</h2>
+          <p>
+            On Rosenbrock, trust-krylov can use the same Hessian-vector product
+            interface as Newton-CG and trust-ncg. Each product \(H_kv\) helps
+            build the Krylov subspace; the accepted step still passes through the
+            usual trust-region agreement check before the outer iterate moves.
+          </p>
           <figure>
             <img src="../assets/trust_krylov_rosenbrock_path.svg" alt="trust-krylov path on Rosenbrock contours" />
             <figcaption>
               This figure uses the same Rosenbrock contour window and classic
               start as the Nelder-Mead, BFGS, Newton-CG, and trust-ncg pages.
-              trust-krylov reaches the Rosenbrock minimum with a sequence of
-              accepted trust-region steps.
+              trust-krylov moves through accepted trust-region steps whose
+              subproblems were solved more accurately in Krylov subspaces.
             </figcaption>
           </figure>
           <figure>
@@ -135,11 +224,13 @@
         </section>
 
         <section id="scipy">
-          <h2>Using SciPy</h2>
+          <h2>Use trust-krylov In SciPy</h2>
           <p>
             In SciPy, use <code>method="trust-krylov"</code>. Provide
             <code>jac</code> and either <code>hess</code> or <code>hessp</code>.
-            The Hessian-vector product version is often the point of the method.
+            The Hessian-vector product version is often the point of the method:
+            it lets the inner Krylov solve learn curvature without storing the
+            full Hessian.
           </p>
           <pre><code>import numpy as np
 from scipy.optimize import minimize
@@ -148,26 +239,26 @@ def rosen(x):
     return np.sum(100.0 * (x[1:] - x[:-1]**2.0)**2.0 + (1 - x[:-1])**2.0)
 
 def rosen_der(x):
-    xm = x[1:-1]
-    xm_m1 = x[:-2]
-    xm_p1 = x[2:]
     der = np.zeros_like(x)
-    der[1:-1] = 200 * (xm - xm_m1**2) - 400 * (xm_p1 - xm**2) * xm - 2 * (1 - xm)
+    der[1:-1] = (
+        200 * (x[1:-1] - x[:-2]**2)
+        - 400 * x[1:-1] * (x[2:] - x[1:-1]**2)
+        - 2 * (1 - x[1:-1])
+    )
     der[0] = -400 * x[0] * (x[1] - x[0]**2) - 2 * (1 - x[0])
     der[-1] = 200 * (x[-1] - x[-2]**2)
     return der
 
 def rosen_hess_p(x, p):
-    x = np.asarray(x)
-    Hp = np.zeros_like(x)
-    Hp[0] = (1200 * x[0]**2 - 400 * x[1] + 2) * p[0] - 400 * x[0] * p[1]
-    Hp[1:-1] = (
+    hp = np.zeros_like(x)
+    hp[0] = (1200 * x[0]**2 - 400 * x[1] + 2) * p[0] - 400 * x[0] * p[1]
+    hp[1:-1] = (
         -400 * x[:-2] * p[:-2]
         + (202 + 1200 * x[1:-1]**2 - 400 * x[2:]) * p[1:-1]
         - 400 * x[1:-1] * p[2:]
     )
-    Hp[-1] = -400 * x[-2] * p[-2] + 200 * p[-1]
-    return Hp
+    hp[-1] = -400 * x[-2] * p[-2] + 200 * p[-1]
+    return hp
 
 x0 = np.array([1.3, 0.7, 0.8, 1.9, 1.2])
 result = minimize(
@@ -179,7 +270,15 @@ result = minimize(
     options={"gtol": 1e-8, "disp": True},
 )
 
-print(result.x)</code></pre>
+print(result.x)
+print(result.fun)
+print(result.success, result.message)</code></pre>
+          <p>
+            Compared with trust-ncg, expect the same information contract but a
+            different cost balance. trust-krylov may spend more Hessian-vector
+            products inside one outer iteration, hoping to need fewer or more
+            reliable outer steps.
+          </p>
         </section>
 
         <section id="when">
@@ -197,11 +296,15 @@ print(result.x)</code></pre>
                 <td>You only have function values; derivative-free methods fit that information level better.</td>
               </tr>
               <tr>
-                <td>The Hessian may be indefinite and a more accurate trust-region subproblem solve is worth extra products.</td>
+                <td>The Hessian may be indefinite, and negative curvature is useful rather than just a nuisance.</td>
                 <td>Each Hessian-vector product is very expensive; trust-ncg may be cheaper per outer iteration.</td>
               </tr>
               <tr>
-                <td>You want fewer nonlinear iterations than trust-ncg on hard curvature.</td>
+                <td>A more accurate trust-region subproblem solve is worth extra inner products.</td>
+                <td>The truncated-CG steps from trust-ncg are already reliable enough for your problem.</td>
+              </tr>
+              <tr>
+                <td>You want a matrix-free method before paying for dense Hessian factorizations.</td>
                 <td>The problem is medium-sized with a cheap dense Hessian; trust-exact may be more direct.</td>
               </tr>
             </tbody>
@@ -221,10 +324,12 @@ print(result.x)</code></pre>
 
       <aside class="toc" aria-label="trust-krylov sections">
         <strong>On this page</strong>
-        <a href="#idea">Core idea</a>
+        <a href="#idea">Why Krylov</a>
         <a href="#subspace">Krylov subspace</a>
-        <a href="#rosenbrock">Rosenbrock example</a>
-        <a href="#scipy">Using SciPy</a>
+        <a href="#projected">Projected problem</a>
+        <a href="#indefinite">Indefinite curvature</a>
+        <a href="#rosenbrock">Rosenbrock</a>
+        <a href="#scipy">SciPy usage</a>
         <a href="#when">When to use it</a>
       </aside>
     </main>

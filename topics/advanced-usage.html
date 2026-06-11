@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Custom Minimizers and Parallel Execution</title>
+    <title>Advanced Optimizer Interfaces Tutorial</title>
     <link rel="stylesheet" href="../styles.css" />
     <script>
       window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
@@ -14,11 +14,12 @@
     <header class="site-header">
       <div class="page">
         <p class="kicker">Advanced optimizer interfaces</p>
-        <h1>Custom minimizers and parallel execution</h1>
+        <h1>Advanced optimizer interfaces tutorial</h1>
         <p class="lede">
-          The final SciPy tutorial sections are not new algorithm families. They
-          show how to plug custom methods into <code>minimize</code> and how to
-          parallelize independent objective evaluations with <code>workers</code>.
+          This page is not another algorithm family. It explains how SciPy lets
+          you connect your own minimizer to the usual <code>minimize</code>
+          interface, and how <code>workers</code> parallelizes batches of
+          independent objective evaluations.
         </p>
         <nav class="nav-row" aria-label="Page navigation">
           <a class="pill" href="../index.html">Overview</a>
@@ -35,105 +36,329 @@
 
     <main class="page content">
       <article>
-        <section id="custom">
-          <h2>Custom Minimizers</h2>
+        <section id="interface">
+          <h2>Start With The Shared Interface</h2>
           <p>
-            <code>minimize</code> normally receives a method name such as
-            <code>"BFGS"</code> or <code>"SLSQP"</code>. It can also receive a
-            callable method. That callable accepts the objective, starting point,
-            arguments, and options, then returns an <code>OptimizeResult</code>:
+            Most pages in this guide choose a solver by passing a string:
+            <code>method="BFGS"</code>, <code>method="SLSQP"</code>, or
+            <code>method="trust-krylov"</code>. That feels like the method is
+            the whole story, but <code>minimize</code> is really a contract
+            around three objects.
+          </p>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Object</th>
+                <th>Meaning</th>
+                <th>Typical shape</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>fun</code></td>
+                <td>The objective function to minimize.</td>
+                <td><code>fun(x, *args) -&gt; float</code></td>
+              </tr>
+              <tr>
+                <td><code>x0</code></td>
+                <td>The starting point supplied by the user.</td>
+                <td>one-dimensional array</td>
+              </tr>
+              <tr>
+                <td><code>res</code></td>
+                <td>The result object returned by the solver.</td>
+                <td><code>OptimizeResult</code></td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            The advanced features on this page keep that contract and swap out
+            the machinery behind it. A custom minimizer changes who decides the
+            next point. <code>workers</code> changes where independent objective
+            calls are evaluated. Neither feature changes the meaning of
+            <code>fun</code>, <code>x0</code>, or the returned result.
+          </p>
+        </section>
+
+        <section id="custom">
+          <h2>Why A Custom Minimizer Exists</h2>
+          <p>
+            Suppose you already have a domain solver: maybe a simulator wrapper,
+            a research prototype, or a tiny coordinate search you want to use
+            inside <code>basinhopping</code>. The tempting shortcut is to call
+            that solver outside SciPy and translate its answer by hand.
+          </p>
+          <p>
+            That shortcut works once, but it loses the common SciPy interface.
+            Meta-optimizers cannot call your method. Existing callback code may
+            not run. Result handling becomes a special case. Passing a callable
+            as <code>method</code> solves that by making your solver look like
+            any other <code>minimize</code> method.
           </p>
           <div class="equation-block">
-            \[
-              \texttt{method(fun,\ x0,\ args,\ **options)}
-              \longrightarrow
-              \texttt{OptimizeResult}.
-            \]
+            <code>method(fun, x0, args, **kwargs, **options) -&gt; OptimizeResult</code>
           </div>
           <p>
-            This is useful when wrapping a domain-specific solver, experimenting
-            with a research method, or using a custom method inside another SciPy
-            optimizer such as <code>basinhopping</code>.
+            Name each part before using it. <code>fun</code> is the objective
+            with the usual SciPy calling convention. <code>x0</code> is the
+            initial point. <code>args</code> are fixed extra objective
+            parameters. <code>kwargs</code> are other pieces passed through
+            <code>minimize</code>, such as <code>jac</code>,
+            <code>callback</code>, <code>bounds</code>, or
+            <code>constraints</code>. <code>options</code> are the entries from
+            the options dictionary, expanded into keyword arguments.
           </p>
+          <div class="callout">
+            Practical contract: accept <code>**options</code> even when you
+            ignore most of it. Future SciPy versions and SciPy wrappers may pass
+            additional keywords, and a custom method should not fail just
+            because it received an option it does not need.
+          </div>
           <figure>
             <img src="../assets/advanced_custom_minimizer_path.svg" alt="Custom callable minimizer path on smooth objective contours" />
             <figcaption>
-              A tiny coordinate-search minimizer is passed as a callable method
-              to <code>minimize</code>. It is intentionally simple, but it shows
-              the interface contract: produce a result object and preserve the
-              same objective-calling convention.
+              The custom method in the generated figure is intentionally simple:
+              it tries fixed coordinate steps and keeps improvements. The point
+              is not that coordinate search is sophisticated; the point is that a
+              callable method can still plug into the SciPy result pipeline.
             </figcaption>
           </figure>
         </section>
 
-        <section id="workers">
-          <h2>Parallel Execution Support</h2>
+        <section id="result">
+          <h2>Return A Result, Not Just A Point</h2>
           <p>
-            Some SciPy optimizers accept a <code>workers</code> keyword. For
-            population methods such as <code>differential_evolution</code>, a
-            generation contains many independent candidates. For local
-            minimizers, numerical differentiation can also create independent
-            perturbation evaluations:
+            A minimizer finds a point, but callers need more than the point. They
+            need to know whether the search stopped normally, how much work was
+            done, and what objective value was reached. That is why the custom
+            method should return an <code>OptimizeResult</code> rather than a raw
+            array.
+          </p>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Question it answers</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>x</code></td>
+                <td>Which point did the solver report?</td>
+              </tr>
+              <tr>
+                <td><code>fun</code></td>
+                <td>What is the objective value at that point?</td>
+              </tr>
+              <tr>
+                <td><code>success</code></td>
+                <td>Did the solver believe it exited successfully?</td>
+              </tr>
+              <tr>
+                <td><code>message</code></td>
+                <td>Why did it stop?</td>
+              </tr>
+              <tr>
+                <td><code>nfev</code>, <code>nit</code></td>
+                <td>How many function evaluations and iterations were used?</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            Different SciPy solvers expose different fields, so do not assume
+            every result contains every possible attribute. The important habit
+            is to return the fields your custom method really knows. A tiny
+            coordinate search can count objective calls and iterations. It should
+            not pretend to know a Hessian inverse.
+          </p>
+        </section>
+
+        <section id="custom-iteration">
+          <h2>One Custom Iteration, Slowly</h2>
+          <p>
+            The coordinate-search example has a deliberately humble model of
+            progress. At the current best point, it tries moving one coordinate
+            down and one coordinate up by a fixed <code>stepsize</code>. If the
+            objective improves, that trial becomes the new best point.
+          </p>
+          <ol>
+            <li>Copy <code>x0</code> into a floating point working vector.</li>
+            <li>Evaluate <code>fun(x, *args)</code> once.</li>
+            <li>For each coordinate-sign pair, test one trial step.</li>
+            <li>Keep the trial only if it lowers the objective.</li>
+            <li>Call <code>callback(x)</code> after an accepted improvement.</li>
+            <li>Stop when one full pass finds no improvement.</li>
+          </ol>
+          <p>
+            This is not a recommendation to use coordinate search for serious
+            smooth problems. It is a small enough algorithm that the interface is
+            visible. The method receives the same objective that a built-in SciPy
+            method would receive, and it returns the same kind of result object.
+          </p>
+        </section>
+
+        <section id="workers">
+          <h2>What Workers Parallelize</h2>
+          <p>
+            Parallel execution helps only when the optimizer has a batch of
+            independent objective evaluations. It does not make one dependent
+            step independent. The outer loop of an optimizer still waits until
+            the needed evaluations are done before choosing the next iteration.
+          </p>
+          <p>
+            In <code>differential_evolution</code>, one generation contains many
+            candidate solutions whose objective values can be evaluated
+            independently. In selected local minimizers, finite-difference
+            gradients create a smaller independent batch around one point.
           </p>
           <div class="equation-block">
-            \[
-              \frac{\partial f}{\partial x_i}
-              \approx
-              \frac{f(x+h e_i)-f(x)}{h}.
-            \]
+            <code>D_i f(x) ~= (f(x + h e_i) - f(x)) / h, for i = 1, ..., N</code>
           </div>
           <p>
-            A two-point finite-difference gradient in \(N\) variables needs
-            \(N+1\) objective evaluations. If those calls are expensive and
-            independent, a map-like worker can evaluate several of them at once.
+            For a two-point forward-difference gradient, the optimizer needs the
+            baseline value \(f(x)\) plus one perturbed value for each coordinate:
+            \(f(x+h e_1)\), \(f(x+h e_2)\), and so on. That is the
+            \(N+1\) evaluation batch. If each call is expensive and independent,
+            several workers can evaluate the batch at the same time.
           </p>
           <figure>
             <img src="../assets/advanced_parallel_workers_model.svg" alt="Finite-difference probes and relative batches with serial, workers, and vectorized map execution" />
             <figcaption>
-              Workers reduce wall time only when there is enough independent
-              objective work to amortize process or dispatch overhead. For cheap
-              objectives, serial execution can still win.
+              Workers reduce wall time when objective calls dominate dispatch
+              overhead. For cheap objectives, starting processes or moving data
+              can cost more than the work being parallelized.
             </figcaption>
           </figure>
         </section>
 
-        <section id="scipy">
-          <h2>Using SciPy</h2>
+        <section id="map">
+          <h2>Workers Are A Map-Like Contract</h2>
           <p>
-            A custom minimizer should accept unknown keyword options so it remains
-            compatible with SciPy wrappers. For parallel execution, prefer a
-            reusable map-like callable when process startup overhead matters.
+            A worker does not receive a magic optimizer object. It receives a
+            function and an iterable of candidate vectors, then returns objective
+            values in the same order. Conceptually, the contract is
+          </p>
+          <div class="equation-block">
+            <code>workers(func, iterable) -&gt; values</code>
+          </div>
+          <p>
+            If <code>workers</code> is an integer, SciPy can create a
+            multiprocessing pool for you. If <code>workers</code> is a callable,
+            SciPy uses it as the map-like object. A reusable
+            <code>pool.map</code> is often better when process startup overhead
+            matters.
+          </p>
+          <p>
+            The failed shortcut is assuming <code>workers=4</code> is always
+            faster. It can be slower when the objective is cheap, when large data
+            must be serialized, or when the objective cannot be pickled. For
+            <code>differential_evolution</code>, parallel workers also require
+            deferred population updating, because the best member cannot be
+            updated continuously while candidate values are still running.
+          </p>
+          <div class="callout">
+            Mental model: workers improve throughput for a batch of independent
+            function calls. They do not improve the mathematical search model,
+            fix scaling, or reduce the number of iterations by themselves.
+          </div>
+        </section>
+
+        <section id="scipy">
+          <h2>Use The Interfaces In SciPy</h2>
+          <p>
+            The code below keeps the lines short on purpose. The custom method
+            accepts extra options, returns an <code>OptimizeResult</code>, and
+            can be passed directly as <code>method</code>. The worker examples
+            reuse one pool for both a population solver and a local method that
+            may use finite differences.
           </p>
           <pre><code>import numpy as np
 from multiprocessing import Pool
-from scipy.optimize import OptimizeResult, differential_evolution, minimize, rosen
+from scipy.optimize import (
+    OptimizeResult,
+    differential_evolution,
+    minimize,
+    rosen,
+)
 
-def custmin(fun, x0, args=(), stepsize=0.1, maxiter=100, callback=None, **options):
-    bestx = np.array(x0, dtype=float)
-    besty = fun(bestx, *args)
+def custmin(
+    fun,
+    x0,
+    args=(),
+    stepsize=0.1,
+    maxiter=100,
+    callback=None,
+    **options,
+):
+    x = np.array(x0, dtype=float)
+    fx = fun(x, *args)
+    cb = callback
+    step = stepsize
     nfev = 1
-    for _ in range(maxiter):
+    nit = 0
+    moves = []
+
+    for i in range(x.size):
+        moves += [(i, -1), (i, 1)]
+
+    for k in range(maxiter):
         improved = False
-        for dim in range(bestx.size):
-            for sign in (-1, 1):
-                trial = bestx.copy()
-                trial[dim] += sign * stepsize
-                value = fun(trial, *args)
-                nfev += 1
-                if value < besty:
-                    bestx, besty = trial, value
-                    improved = True
-                    if callback is not None:
-                        callback(bestx)
+        for i, s in moves:
+            xp = x.copy()
+            xp[i] += s * step
+            fp = fun(xp, *args)
+            nfev += 1
+            if fp >= fx:
+                continue
+            x = xp
+            fx = fp
+            improved = True
+            if cb:
+                cb(x)
         if not improved:
             break
-    return OptimizeResult(x=bestx, fun=besty, success=True, nfev=nfev)
+        nit = k + 1
 
-custom = minimize(rosen, x0=np.array([1.3, 0.7, 0.8]), method=custmin)
+    return OptimizeResult(
+        x=x,
+        fun=fx,
+        success=True,
+        message="stopped",
+        nfev=nfev,
+        nit=nit,
+    )
 
-bounds = [(0.0, 10.0), (0.0, 10.0), (0.0, 10.0)]
+x0 = np.array([1.3, 0.7, 0.8])
+custom = minimize(
+    rosen,
+    x0,
+    method=custmin,
+    options={"stepsize": 0.05},
+)
+
+bounds = [(0.0, 10.0)] * 3
 with Pool(2) as pool:
-    de = differential_evolution(rosen, bounds, workers=pool.map, updating="deferred")</code></pre>
+    de = differential_evolution(
+        rosen,
+        bounds,
+        workers=pool.map,
+        updating="deferred",
+    )
+    worker_opts = {
+        "workers": pool.map,
+    }
+    lbfgsb = minimize(
+        rosen,
+        x0,
+        method="L-BFGS-B",
+        options=worker_opts,
+    )</code></pre>
+          <p>
+            Notice the two kinds of customization. <code>method=custmin</code>
+            replaces the algorithm that chooses trial points. The
+            <code>workers</code> option keeps the algorithm but changes how a
+            batch of objective evaluations is executed.
+          </p>
         </section>
 
         <section id="when">
@@ -148,34 +373,44 @@ with Pool(2) as pool:
             </thead>
             <tbody>
               <tr>
-                <td>Custom method</td>
-                <td>You need to wrap a solver, prototype a method, or integrate with a SciPy meta-optimizer.</td>
-                <td>Return a complete <code>OptimizeResult</code> and accept extra options.</td>
+                <td>Callable method</td>
+                <td>You need to wrap a solver, prototype a method, or plug a method into a SciPy meta-optimizer.</td>
+                <td>Preserve the SciPy calling convention and return a useful <code>OptimizeResult</code>.</td>
+              </tr>
+              <tr>
+                <td><code>OptimizeResult</code></td>
+                <td>Callers need a standard way to inspect the point, objective value, status, and work counts.</td>
+                <td>Only report fields the method actually knows.</td>
               </tr>
               <tr>
                 <td><code>workers=int</code></td>
-                <td>You want SciPy to create a process pool for independent evaluations.</td>
-                <td>The objective must be pickleable; lambdas and closures often fail.</td>
+                <td>You want SciPy to manage process-based parallel evaluation.</td>
+                <td>The objective must be pickleable, and startup overhead can dominate cheap functions.</td>
               </tr>
               <tr>
                 <td>Map-like workers</td>
-                <td>You want to reuse a pool, use MPI, or vectorize batches of candidate evaluations.</td>
-                <td>Performance improves only when objective calls dominate overhead.</td>
+                <td>You want to reuse a pool, route work to another executor, or batch evaluations in a custom way.</td>
+                <td>The callable must behave like <code>map</code>: same input order, same output order.</td>
               </tr>
             </tbody>
           </table>
           <div class="callout">
-            Practical habit: parallelism is a throughput tool, not a convergence
-            tool. It can make a batch of objective calls faster, but it does not
-            make a weak model, bad scaling, or poor constraints disappear.
+            Practical habit: customize the interface only when it removes a real
+            integration problem. If a built-in method and a serial objective are
+            already clear and fast, adding a custom method or worker pool mostly
+            adds moving parts.
           </div>
         </section>
       </article>
 
       <aside class="toc" aria-label="advanced usage sections">
         <strong>On this page</strong>
+        <a href="#interface">Shared interface</a>
         <a href="#custom">Custom minimizers</a>
-        <a href="#workers">Parallel workers</a>
+        <a href="#result">OptimizeResult</a>
+        <a href="#custom-iteration">Custom iteration</a>
+        <a href="#workers">Workers</a>
+        <a href="#map">Map-like contract</a>
         <a href="#scipy">Using SciPy</a>
         <a href="#when">When to use it</a>
       </aside>

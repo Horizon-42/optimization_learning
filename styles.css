@@ -269,8 +269,15 @@ figcaption {
   background: var(--soft);
 }
 
+.equation-block code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 pre {
   overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   padding: 16px;
   border-radius: 8px;
   background: var(--code);
@@ -301,6 +308,18 @@ code {
 @media (max-width: 860px) {
   .content {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .summary-table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    table-layout: fixed;
+  }
+
+  .summary-table th,
+  .summary-table td {
+    overflow-wrap: anywhere;
   }
 
   .toc {

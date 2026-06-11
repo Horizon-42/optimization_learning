@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Linear and Combinatorial Optimization</title>
+    <title>Structured Optimization Tutorial</title>
     <link rel="stylesheet" href="../styles.css" />
     <script>
       window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
@@ -14,11 +14,11 @@
     <header class="site-header">
       <div class="page">
         <p class="kicker">Structured linear and discrete models</p>
-        <h1>Linear and combinatorial optimization</h1>
+        <h1>Structured optimization tutorial</h1>
         <p class="lede">
-          Some problems are not best treated as smooth nonlinear objectives.
+          Some problems should not be treated as generic smooth objectives.
           Linear programs, assignment problems, and mixed-integer models expose
-          algebraic structure that specialized solvers can exploit directly.
+          algebraic structure that specialized solvers can use directly.
         </p>
         <nav class="nav-row" aria-label="Page navigation">
           <a class="pill" href="../index.html">Overview</a>
@@ -36,64 +36,152 @@
     <main class="page content">
       <article>
         <section id="idea">
-          <h2>Core Idea</h2>
+          <h2>Model First, Then Solve</h2>
           <p>
-            Structured optimization makes constraints and decision-variable
-            types explicit. For a linear program, SciPy's tutorial uses the
-            standard form
+            A smooth local minimizer starts from a point and follows local
+            information. Structured optimization starts one level earlier: first
+            describe the decision variables, objective, and constraints in a
+            form a specialized solver understands.
           </p>
-          <div class="equation-block">
-            \[
-              \begin{aligned}
-                \min_x\quad & c^\mathsf{T}x\\
-                \text{subject to}\quad
-                & A_{ub}x\leq b_{ub},\\
-                & A_{eq}x=b_{eq},\\
-                & \ell\leq x\leq u.
-              \end{aligned}
-            \]
+          <p>
+            The key question is not only "what value should be small?" It is
+            also "what kind of choices are allowed?" Continuous decisions,
+            one-to-one assignments, and binary decisions need different models.
+          </p>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Problem structure</th>
+                <th>Decision meaning</th>
+                <th>SciPy tool</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Linear program</td>
+                <td>Continuous variables with linear objective and constraints.</td>
+                <td><code>linprog</code></td>
+              </tr>
+              <tr>
+                <td>Assignment</td>
+                <td>Choose row-column matches with minimum total cost.</td>
+                <td><code>linear_sum_assignment</code></td>
+              </tr>
+              <tr>
+                <td>Mixed-integer linear program</td>
+                <td>Some variables must be integer or binary.</td>
+                <td><code>milp</code></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            Mental model: the solver is only as good as the model you hand it.
+            In structured optimization, sign conventions, inequality direction,
+            bounds, and integrality are part of the algorithmic input.
           </div>
-          <p>
-            Assignment and mixed-integer models add discrete choices. They are
-            still algebraic, but the feasible set is no longer a smooth surface.
-          </p>
         </section>
 
         <section id="linprog">
           <h2>Linear Programming</h2>
           <p>
-            <code>linprog</code> minimizes a linear objective over linear
-            equality, inequality, and bound constraints. In two dimensions, the
-            feasible set is a polygon; in higher dimensions it is a polytope.
+            A linear program has a linear objective and linear constraints. The
+            decision vector is \(x\). The objective coefficients are \(c\), so
+            the scalar objective is \(c^\mathsf{T}x\). SciPy's
+            <code>linprog</code> expects the common minimization form
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \min_x\quad & c^\mathsf{T}x\\
+              \text{subject to}\quad
+              & A_{\mathrm{ub}}x\leq b_{\mathrm{ub}},\\
+              & A_{\mathrm{eq}}x=b_{\mathrm{eq}},\\
+              & \ell\leq x\leq u.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            Each row of \(A_{\mathrm{ub}}\) is one less-than-or-equal
+            inequality. Each row of \(A_{\mathrm{eq}}\) is one equality. The
+            lower and upper vectors \(\ell\) and \(u\) are simple variable
+            bounds. By default, <code>linprog</code> treats variables as
+            nonnegative unless you specify different bounds.
+          </p>
+          <p>
+            The failed shortcut is to send this to a generic nonlinear optimizer.
+            That hides the linear geometry. In a linear program, the feasible
+            region is a polytope and a linear objective reaches its optimum at a
+            boundary point, often a vertex.
           </p>
           <figure>
             <img src="../assets/structured_linprog_geometry.svg" alt="Linear programming feasible polygon and optimal vertex" />
             <figcaption>
               A linear objective reaches its optimum at a vertex of the feasible
-              polytope. SciPy's <code>linprog</code> uses the HiGHS solvers for
-              these models.
+              polytope. SciPy's <code>linprog</code> uses HiGHS solvers for these
+              models.
             </figcaption>
           </figure>
+        </section>
+
+        <section id="maximization">
+          <h2>Maximization Is A Sign Choice</h2>
+          <p>
+            Many real problems are described as maximization: maximize value,
+            profit, throughput, or score. <code>linprog</code> and
+            <code>milp</code> minimize. The conversion is simple but important:
+            maximizing \(v^\mathsf{T}x\) is the same decision as minimizing its
+            negative.
+          </p>
+          <div class="equation-block">
+            \[
+              \max_x v^\mathsf{T}x
+              \quad\Longleftrightarrow\quad
+              \min_x -v^\mathsf{T}x.
+            \]
+          </div>
+          <p>
+            This is a common source of bugs. If the reported objective has the
+            opposite sign from the business quantity you care about, that may be
+            correct: the solver minimized the negated objective.
+          </p>
         </section>
 
         <section id="assignment">
           <h2>Assignment Problems</h2>
           <p>
-            The linear sum assignment problem chooses one entry from each row
-            without reusing columns:
+            An assignment problem is not just "pick the cheapest entry in each
+            row." Rows and columns compete. Once a column is used, it cannot be
+            reused by another row in the same assignment.
+          </p>
+          <p>
+            Let \(C_{ij}\) be the cost of assigning row \(i\) to column \(j\).
+            Let \(X_{ij}\) be a binary decision: \(1\) if that assignment is
+            chosen, and \(0\) otherwise. For a square one-to-one assignment,
           </p>
           <div class="equation-block">
             \[
-              \min_X \sum_i\sum_j C_{ij}X_{ij},
-              \qquad
-              X_{ij}\in\{0,1\}.
+            \begin{aligned}
+              \min_X\quad
+              &\sum_i\sum_j C_{ij}X_{ij},\\
+              \sum_j X_{ij}&=1
+              \quad\text{for each row }i,\\
+              \sum_i X_{ij}&=1
+              \quad\text{for each column }j,\\
+              X_{ij}&\in\{0,1\}.
+            \end{aligned}
             \]
           </div>
+          <p>
+            <code>linear_sum_assignment</code> takes the cost matrix and returns
+            the row and column indices of the selected cells. It can also handle
+            rectangular cost matrices, where not every row or column must
+            necessarily be matched.
+          </p>
           <figure>
             <img src="../assets/structured_assignment_matrix.svg" alt="Medley relay assignment cost matrix with optimal cells highlighted" />
             <figcaption>
-              The tutorial's medley relay example assigns each swimming style to
-              a different student. The lowest cell in each row is not always a
+              The medley relay example assigns each swimming style to a
+              different student. The lowest cell in each row is not always a
               valid global assignment because columns cannot be reused.
             </figcaption>
           </figure>
@@ -102,18 +190,36 @@
         <section id="milp">
           <h2>Mixed-Integer Linear Programming</h2>
           <p>
-            Mixed-integer linear programming keeps some decision variables
-            integer. The tutorial's knapsack example uses binary variables:
+            Mixed-integer linear programming keeps the linear objective and
+            linear constraints, but some variables must be integer-valued. A
+            binary variable is the most common special case:
           </p>
           <div class="equation-block">
             \[
-              \max \sum_i v_i x_i
-              \quad
-              \text{subject to}
-              \quad
-              \sum_i s_i x_i\leq C,\qquad x_i\in\{0,1\}.
+              x_i\in\{0,1\}.
             \]
           </div>
+          <p>
+            The tutorial's knapsack example chooses whole items. Each item has a
+            value \(v_i\), a size \(s_i\), and a binary decision \(x_i\). The
+            capacity is \(C\):
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \max_x\quad & \sum_i v_i x_i\\
+              \text{subject to}\quad
+              & \sum_i s_i x_i\leq C,\\
+              & x_i\in\{0,1\}.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            The tempting shortcut is to solve a relaxed linear program and round
+            the fractional solution. That can break capacity constraints or miss
+            the true best integer combination. <code>milp</code> keeps the
+            discrete decision semantics in the model.
+          </p>
           <figure>
             <img src="../assets/structured_milp_knapsack.svg" alt="MILP knapsack selected items and capacity usage" />
             <figcaption>
@@ -125,38 +231,82 @@
         </section>
 
         <section id="scipy">
-          <h2>Using SciPy</h2>
+          <h2>Use Structured Optimization In SciPy</h2>
           <p>
-            The APIs are different because the problem structures are different:
-            matrix form for linear programming, a cost matrix for assignment, and
-            integrality flags for MILP.
+            The APIs differ because the models differ: arrays for linear
+            programs, a cost matrix for assignment, and integrality flags for
+            mixed-integer linear programs.
           </p>
           <pre><code>import numpy as np
-from scipy.optimize import Bounds, LinearConstraint, linear_sum_assignment, linprog, milp
+from scipy import optimize as opt
 
-# Linear programming: maximize 3*x0 + 2*x1 by minimizing its negative.
 c = np.array([-3.0, -2.0])
-A_ub = np.array([[1.0, 1.0], [2.0, 1.0], [1.0, 0.0], [0.0, 1.0]])
-b_ub = np.array([4.0, 5.0, 3.0, 3.0])
-lp = linprog(c, A_ub=A_ub, b_ub=b_ub, bounds=[(0.0, None), (0.0, None)])
+A_ub = np.array([
+    [1.0, 1.0],
+    [2.0, 1.0],
+    [1.0, 0.0],
+    [0.0, 1.0],
+])
+b_ub = np.array([
+    4.0,
+    5.0,
+    3.0,
+    3.0,
+])
+lp_bounds = [
+    (0.0, None),
+    (0.0, None),
+]
 
-# Assignment: rows are swimming styles, columns are students.
-cost = np.array([[43.5, 45.5, 43.4, 46.5, 46.3],
-                 [47.1, 42.1, 39.1, 44.1, 47.8],
-                 [48.4, 49.6, 42.1, 44.5, 50.4],
-                 [38.2, 36.8, 43.2, 41.2, 37.2]])
-row_ind, col_ind = linear_sum_assignment(cost)
+lp = opt.linprog(
+    c,
+    A_ub=A_ub,
+    b_ub=b_ub,
+    bounds=lp_bounds,
+    method="highs",
+)
 
-# MILP knapsack: maximize value under capacity, with binary variables.
-sizes = np.array([21, 11, 15, 9, 34, 25, 41, 52])
-values = np.array([22, 12, 16, 10, 35, 26, 42, 53])
-capacity = 100
-milp_result = milp(
+cost = np.array([
+    [43.5, 45.5, 43.4],
+    [47.1, 42.1, 39.1],
+    [48.4, 49.6, 42.1],
+])
+lsa = opt.linear_sum_assignment
+rows, cols = lsa(cost)
+chosen = cost[rows, cols]
+total = chosen.sum()
+
+sizes = np.array([21, 11, 15])
+values = np.array([22, 12, 16])
+capacity = 35
+
+lc = opt.LinearConstraint
+constraint = lc(
+    A=sizes[None, :],
+    lb=0,
+    ub=capacity,
+)
+binary = np.ones_like(values)
+binary_bounds = opt.Bounds(0, 1)
+
+knapsack = opt.milp(
     c=-values,
-    constraints=LinearConstraint(sizes, lb=0, ub=capacity),
-    integrality=np.ones_like(values),
-    bounds=Bounds(0, 1),
-)</code></pre>
+    constraints=constraint,
+    integrality=binary,
+    bounds=binary_bounds,
+)
+
+print(lp.x, -lp.fun)
+print(rows, cols, total)
+print(knapsack.x)
+print(-knapsack.fun)</code></pre>
+          <p>
+            Read the signs carefully. In the LP and knapsack examples, the code
+            minimizes negative values in order to maximize the original value.
+            The solution vector is still the decision you want; the reported
+            solver objective may need to be negated to recover the original
+            maximization value.
+          </p>
         </section>
 
         <section id="when">
@@ -173,35 +323,36 @@ milp_result = milp(
               <tr>
                 <td><code>linprog</code></td>
                 <td>Objective and constraints are linear and variables are continuous.</td>
-                <td>Convert maximization to minimization by negating the objective.</td>
+                <td>Convert all inequalities to the expected direction and state bounds explicitly.</td>
               </tr>
               <tr>
                 <td><code>linear_sum_assignment</code></td>
                 <td>You need one-to-one matching with minimum total cost.</td>
-                <td>Put the assignable groups on rows and columns of a cost matrix.</td>
+                <td>Build a cost matrix whose rows and columns are the assignable groups.</td>
               </tr>
               <tr>
                 <td><code>milp</code></td>
-                <td>Some variables must be integer or binary.</td>
-                <td>Use bounds plus <code>integrality</code> to encode discrete decisions.</td>
+                <td>Some variables must be integer, semi-continuous, semi-integer, or binary.</td>
+                <td>Use <code>integrality</code>, bounds, and <code>LinearConstraint</code> to encode decisions.</td>
               </tr>
             </tbody>
           </table>
           <div class="callout">
             Practical habit: model first, solve second. Most structured
-            optimization bugs are sign errors, wrong inequality direction, or
-            forgotten integrality constraints.
+            optimization bugs are sign errors, wrong inequality direction,
+            implicit nonnegative bounds, or forgotten integrality constraints.
           </div>
         </section>
       </article>
 
       <aside class="toc" aria-label="structured optimization sections">
         <strong>On this page</strong>
-        <a href="#idea">Core idea</a>
-        <a href="#linprog">Linear programming</a>
+        <a href="#idea">Model first</a>
+        <a href="#linprog">Linear programs</a>
+        <a href="#maximization">Maximization</a>
         <a href="#assignment">Assignment</a>
         <a href="#milp">MILP</a>
-        <a href="#scipy">Using SciPy</a>
+        <a href="#scipy">SciPy usage</a>
         <a href="#when">When to use it</a>
       </aside>
     </main>

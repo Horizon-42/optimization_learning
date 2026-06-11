@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Trust-Region Newton-CG Algorithm</title>
+    <title>trust-ncg Tutorial</title>
     <link rel="stylesheet" href="../styles.css" />
     <script>
       window.MathJax = { tex: { displayMath: [["\\[", "\\]"], ["$$", "$$"]] } };
@@ -14,11 +14,12 @@
     <header class="site-header">
       <div class="page">
         <p class="kicker">Trust-region second-order minimization</p>
-        <h1>Trust-Region Newton-Conjugate-Gradient algorithm</h1>
+        <h1>trust-ncg tutorial</h1>
         <p class="lede">
-          trust-ncg keeps Newton-CG's Hessian-aware search, but replaces a line
-          search with a trust radius. Each step must stay inside a region where
-          the local quadratic model is expected to be reliable.
+          trust-ncg starts from Newton-CG's quadratic model, then changes the
+          safety mechanism. Instead of first choosing a direction and then
+          searching along it, it asks for the best Newton-like step that fits
+          inside a radius where the model is trusted.
         </p>
         <nav class="nav-row" aria-label="Page navigation">
           <a class="pill" href="../index.html">Overview</a>
@@ -35,37 +36,81 @@
     <main class="page content">
       <article>
         <section id="idea">
-          <h2>Core Idea</h2>
+          <h2>From Line Search To Trust Regions</h2>
           <p>
-            Newton-CG is a line-search method: it finds a direction from a
-            quadratic model, then searches along that direction. trust-ncg instead
-            limits the step first and solves a constrained quadratic subproblem:
+            Newton-CG builds a local quadratic model at the current point
+            \(x_k\), approximately solves the Newton equation, and then uses a
+            line search to decide how much of that direction to take. That works
+            well when the direction is reliable and the line search can find a
+            safe step along it.
+          </p>
+          <p>
+            The fragile part is the order of decisions. A line-search method
+            first commits to a direction \(p_k\), then asks for a scalar
+            \(\alpha_k\) along that one ray. If the quadratic model is poor or
+            the Hessian is indefinite, the chosen ray may be the wrong thing to
+            trust.
+          </p>
+          <p>
+            A trust-region method reverses the question. It first chooses a
+            maximum step size \(\Delta_k\), then asks: among all steps inside
+            that ball, which one minimizes the quadratic model best? The step
+            \(p\) is still a movement away from \(x_k\), \(g_k=\nabla f(x_k)\)
+            is the current gradient, and \(H_k=\nabla^2 f(x_k)\) is the current
+            Hessian or Hessian-vector product operator:
           </p>
           <div class="equation-block">
             \[
+            \begin{aligned}
               \min_{p}
               m_k(p)
-              =
-              f(x_k)+g_k^\mathsf{T}p+\frac{1}{2}p^\mathsf{T}H_kp
-              \quad
-              \text{subject to}
-              \quad
-              \|p\|\leq\Delta_k.
+              &=
+              f(x_k)+g_k^\mathsf{T}p\\
+              &\quad+\frac{1}{2}p^\mathsf{T}H_kp,\\
+              \|p\|&\leq\Delta_k.
+            \end{aligned}
             \]
           </div>
           <p>
-            The update is then \(x_{k+1}=x_k+p_k\) if the step gives enough real
-            improvement. The radius \(\Delta_k\) is the algorithm's caution knob:
-            small when the model is unreliable, larger when the model predicts
-            the real objective well.
+            The scalar \(\Delta_k\) is the trust radius. It is not a learning
+            rate and it is not the same thing as a line-search \(\alpha_k\).
+            \(\alpha_k\) scales one already chosen direction. \(\Delta_k\)
+            limits the whole set of candidate steps before the direction is
+            chosen.
           </p>
+          <div class="callout">
+            Mental model: Newton-CG asks "which Newton-like direction should I
+            try, and how far along it is safe?" trust-ncg asks "inside this
+            trusted neighborhood, which Newton-like step is best?"
+          </div>
         </section>
 
         <section id="radius">
           <h2>Trust Radius And Agreement</h2>
           <p>
-            A trust-region method compares actual reduction against predicted
-            model reduction:
+            Once the subproblem proposes a step \(p_k\), the algorithm must
+            check whether the model deserved that trust. It compares two
+            reductions.
+          </p>
+          <p>
+            The actual reduction is what happened to the real objective:
+          </p>
+          <div class="equation-block">
+            \[
+              \text{actual reduction}=f(x_k)-f(x_k+p_k).
+            \]
+          </div>
+          <p>
+            The predicted reduction is what the quadratic model claimed would
+            happen:
+          </p>
+          <div class="equation-block">
+            \[
+              \text{predicted reduction}=m_k(0)-m_k(p_k).
+            \]
+          </div>
+          <p>
+            The agreement ratio \(\rho_k\) divides those two quantities:
           </p>
           <div class="equation-block">
             \[
@@ -76,22 +121,34 @@
             \]
           </div>
           <p>
-            If \(\rho_k\) is small or negative, the model over-promised and the
-            radius should shrink. If \(\rho_k\) is close to one and the step
-            touched the boundary, the local model is trusted farther next time.
+            This scalar has one job: measure whether the local quadratic model
+            predicted the real objective. If \(\rho_k\approx 1\), the model's
+            predicted drop was close to the real drop. If \(\rho_k\leq 0\), the
+            trial step failed to reduce the real objective even though the model
+            expected improvement.
+          </p>
+          <p>
+            The tempting shortcut is to make \(\Delta_k\) tiny so every model
+            looks locally safe. That almost works, but it can make the method
+            crawl. trust-ncg adapts instead: shrink the radius when
+            \(\rho_k\) is poor, accept useful steps when \(\rho_k\) is good
+            enough, and expand the radius only when the model was accurate and
+            the proposed step actually reached the boundary.
           </p>
           <figure>
             <img src="../assets/trust_ncg_subproblem.svg" alt="trust-ncg quadratic subproblem with trust radius" />
             <figcaption>
               The unconstrained Newton step may be outside the reliable region.
-              trust-ncg solves for the best model step that fits inside the ball.
+              trust-ncg solves for the best model step that fits inside the ball
+              before checking that step on the real objective.
             </figcaption>
           </figure>
           <figure>
             <img src="../assets/trust_ncg_radius_agreement.svg" alt="trust-region radius agreement ratio" />
             <figcaption>
-              The ratio \(\rho_k\) measures whether the quadratic model predicted
-              the true objective well. It drives trust-radius shrink and expansion.
+              The ratio \(\rho_k\) connects model prediction to real objective
+              behavior. It is the feedback signal for shrinking, keeping, or
+              expanding the trust radius.
             </figcaption>
           </figure>
         </section>
@@ -99,41 +156,107 @@
         <section id="cg">
           <h2>Truncated CG Subproblem Solve</h2>
           <p>
-            trust-ncg uses conjugate gradients to solve the trust-region
-            subproblem approximately. The inner solve stops when it has found a
-            good enough step, when it hits the trust-region boundary, or when it
-            detects curvature that makes a boundary step preferable.
+            The trust-region subproblem is still a Newton-style quadratic
+            problem. If there were no radius constraint and \(H_k\) were positive
+            definite, its minimizer would solve the usual Newton equation:
           </p>
           <div class="equation-block">
             \[
-              H_kp \approx -g_k,
-              \qquad
-              \|p\|\leq\Delta_k,
-              \qquad
-              H_kv \text{ can be supplied as a product.}
+              H_kp=-g_k.
             \]
           </div>
           <p>
-            This is why trust-ncg is still suitable for large smooth problems:
-            like Newton-CG, it can use Hessian-vector products instead of dense
-            Hessian factorizations.
+            trust-ncg uses conjugate gradients to search for that model
+            minimizer without factoring the Hessian. It can use a dense
+            Hessian, but its large-problem appeal is the same as Newton-CG:
+            the inner iteration only needs products \(H_kv\).
+          </p>
+
+          <h3>What Gets Truncated?</h3>
+          <p>
+            Ordinary CG would keep improving the quadratic solve until the
+            residual was small enough. trust-ncg adds a guardrail: every inner
+            step must remain inside \(\|p\|\leq\Delta_k\). The inner solve stops
+            early in three common cases.
+          </p>
+          <ol>
+            <li>
+              The residual becomes small. Then the quadratic model has been
+              solved well enough inside the trust region.
+            </li>
+            <li>
+              The next CG step would cross the boundary. Then the method takes
+              the boundary point along that CG direction.
+            </li>
+            <li>
+              CG detects non-positive curvature. Then the quadratic model is not
+              a proper bowl along the current direction, so the best safe move is
+              again on the boundary.
+            </li>
+          </ol>
+
+          <h3>Boundary Stops Are Not Failures</h3>
+          <p>
+            Suppose the current inner CG estimate is \(p_j\) and the next CG
+            direction is \(d_j\). If the full move \(p_j+\eta_jd_j\) would leave
+            the trust ball, trust-ncg chooses the scalar \(\tau\) that lands
+            exactly on the boundary:
+          </p>
+          <div class="equation-block">
+            \[
+              \|p_j+\tau d_j\|=\Delta_k.
+            \]
+          </div>
+          <p>
+            The scalar \(\tau\) is just the remaining distance allowed in that
+            direction. It is the trust-region version of "go as far as the model
+            is currently allowed to be trusted."
+          </p>
+
+          <h3>Negative Curvature Changes The Question</h3>
+          <p>
+            CG also watches the curvature number
+            \(d_j^\mathsf{T}H_kd_j\). When this number is positive, the
+            quadratic model curves upward along \(d_j\), so a finite line
+            minimizer makes sense. When it is zero or negative, the model is flat
+            or bends downward along that direction:
+          </p>
+          <div class="equation-block">
+            \[
+              d_j^\mathsf{T}H_kd_j \leq 0.
+            \]
+          </div>
+          <p>
+            The tempting shortcut is to keep running CG anyway. But along
+            negative curvature, the local model would prefer to keep moving
+            until the radius stops it. That is exactly why a trust region helps:
+            it lets the method exploit a useful negative-curvature direction
+            without letting the quadratic model run away.
+          </p>
+          <p>
+            Meaning: truncated CG is not a weaker Newton-CG by accident. It is
+            CG modified to respect the radius and to handle curvature that is not
+            positive definite.
           </p>
         </section>
 
         <section id="rosenbrock">
-          <h2>Rosenbrock Example</h2>
+          <h2>Watch It On Rosenbrock</h2>
           <p>
-            On Rosenbrock, trust-ncg uses the same gradient and Hessian formulas
-            introduced for Newton-CG, but step acceptance is governed by the
-            trust-region model rather than a line search.
+            On Rosenbrock, trust-ncg uses the same objective, gradient, and
+            Hessian-vector product structure introduced on the Newton-CG page.
+            The difference is step control. Newton-CG says
+            \(x_{k+1}=x_k+\alpha_kp_k\) after a line search. trust-ncg says
+            \(x_{k+1}=x_k+p_k\) only after the trust-region step passes the
+            agreement test.
           </p>
           <figure>
             <img src="../assets/trust_ncg_rosenbrock_path.svg" alt="trust-ncg path on Rosenbrock contours" />
             <figcaption>
               This figure uses the same Rosenbrock contour window and classic
-              start as the Nelder-Mead, BFGS, and Newton-CG pages. trust-ncg
-              takes accepted trust-region steps through the curved valley and
-              reaches the minimum in a small number of outer iterations.
+              start as the Nelder-Mead, BFGS, and Newton-CG pages. The path is a
+              sequence of accepted trust-region steps, not line-search-scaled
+              steps along preselected rays.
             </figcaption>
           </figure>
           <figure>
@@ -148,11 +271,13 @@
         </section>
 
         <section id="scipy">
-          <h2>Using SciPy</h2>
+          <h2>Use trust-ncg In SciPy</h2>
           <p>
             In SciPy, use <code>method="trust-ncg"</code>. Provide
             <code>jac</code> and either a full Hessian through <code>hess</code>
-            or a Hessian-vector product through <code>hessp</code>.
+            or a Hessian-vector product through <code>hessp</code>. The
+            <code>hessp</code> version is the natural bridge from Newton-CG:
+            both methods can apply curvature without storing the dense Hessian.
           </p>
           <pre><code>import numpy as np
 from scipy.optimize import minimize
@@ -161,23 +286,26 @@ def rosen(x):
     return np.sum(100.0 * (x[1:] - x[:-1]**2.0)**2.0 + (1 - x[:-1])**2.0)
 
 def rosen_der(x):
-    xm = x[1:-1]
-    xm_m1 = x[:-2]
-    xm_p1 = x[2:]
     der = np.zeros_like(x)
-    der[1:-1] = 200 * (xm - xm_m1**2) - 400 * (xm_p1 - xm**2) * xm - 2 * (1 - xm)
+    der[1:-1] = (
+        200 * (x[1:-1] - x[:-2]**2)
+        - 400 * x[1:-1] * (x[2:] - x[1:-1]**2)
+        - 2 * (1 - x[1:-1])
+    )
     der[0] = -400 * x[0] * (x[1] - x[0]**2) - 2 * (1 - x[0])
     der[-1] = 200 * (x[-1] - x[-2]**2)
     return der
 
-def rosen_hess(x):
-    x = np.asarray(x)
-    H = np.diag(-400 * x[:-1], 1) - np.diag(400 * x[:-1], -1)
-    diagonal = np.zeros_like(x)
-    diagonal[0] = 1200 * x[0]**2 - 400 * x[1] + 2
-    diagonal[-1] = 200
-    diagonal[1:-1] = 202 + 1200 * x[1:-1]**2 - 400 * x[2:]
-    return H + np.diag(diagonal)
+def rosen_hess_p(x, p):
+    hp = np.zeros_like(x)
+    hp[0] = (1200 * x[0]**2 - 400 * x[1] + 2) * p[0] - 400 * x[0] * p[1]
+    hp[1:-1] = (
+        -400 * x[:-2] * p[:-2]
+        + (202 + 1200 * x[1:-1]**2 - 400 * x[2:]) * p[1:-1]
+        - 400 * x[1:-1] * p[2:]
+    )
+    hp[-1] = -400 * x[-2] * p[-2] + 200 * p[-1]
+    return hp
 
 x0 = np.array([1.3, 0.7, 0.8, 1.9, 1.2])
 result = minimize(
@@ -185,11 +313,19 @@ result = minimize(
     x0,
     method="trust-ncg",
     jac=rosen_der,
-    hess=rosen_hess,
+    hessp=rosen_hess_p,
     options={"gtol": 1e-8, "disp": True},
 )
 
-print(result.x)</code></pre>
+print(result.x)
+print(result.fun)
+print(result.success, result.message)</code></pre>
+          <p>
+            The key contract is the same as Newton-CG:
+            <code>rosen_hess_p(x, p)</code> returns \(H(x)p\), not the matrix
+            \(H(x)\). trust-ncg then uses those products inside its truncated CG
+            trust-region solve.
+          </p>
         </section>
 
         <section id="when">
@@ -203,11 +339,15 @@ print(result.x)</code></pre>
             </thead>
             <tbody>
               <tr>
-                <td>You have gradients and Hessian or Hessian-vector products for a smooth unconstrained problem.</td>
+                <td>You have gradients and Hessian-vector products for a smooth unconstrained problem.</td>
                 <td>You only have function values; derivative-free methods are a better starting point.</td>
               </tr>
               <tr>
-                <td>Newton-CG line-search steps are unstable because the Hessian is ill-conditioned.</td>
+                <td>Newton-CG line-search steps are unstable or too sensitive to the full Newton direction.</td>
+                <td>The line search is already reliable and each Hessian-vector product is expensive; Newton-CG may be cheaper.</td>
+              </tr>
+              <tr>
+                <td>The Hessian can be indefinite, and you want the radius to control negative-curvature steps.</td>
                 <td>You want a more accurate trust-region subproblem solve; trust-krylov is the next candidate.</td>
               </tr>
               <tr>
@@ -231,11 +371,11 @@ print(result.x)</code></pre>
 
       <aside class="toc" aria-label="trust-ncg sections">
         <strong>On this page</strong>
-        <a href="#idea">Core idea</a>
+        <a href="#idea">Trust regions</a>
         <a href="#radius">Trust radius</a>
         <a href="#cg">Truncated CG</a>
-        <a href="#rosenbrock">Rosenbrock example</a>
-        <a href="#scipy">Using SciPy</a>
+        <a href="#rosenbrock">Rosenbrock</a>
+        <a href="#scipy">SciPy usage</a>
         <a href="#when">When to use it</a>
       </aside>
     </main>
