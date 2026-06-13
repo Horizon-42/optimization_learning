@@ -155,41 +155,176 @@
         <section id="methods">
           <h2>trust-constr And SLSQP</h2>
           <p>
-            SciPy offers several constrained local optimizers. The tutorial
-            contrast here is between <code>trust-constr</code> and
-            <code>SLSQP</code>.
+            Both methods are local constrained optimizers. They start from the
+            same question: from the current point \(x_k\), what nearby point
+            should be tried next if the objective wants to go one way and the
+            constraints allow only some directions?
           </p>
           <p>
-            <code>trust-constr</code> is the more expressive modern interface. It
-            uses <code>Bounds</code>, <code>LinearConstraint</code>, and
-            <code>NonlinearConstraint</code> objects. That object-style interface
-            lets you name the lower and upper limits for each constraint and
-            provide derivatives when the problem needs them.
+            The tempting shortcut is to take an unconstrained step and then
+            repair it afterward. That is often the wrong mental model. A repair
+            step may land on a feasible point that is not low, or it may destroy
+            the curvature information that made the original step useful. The
+            constrained methods instead build feasibility into the step choice.
           </p>
           <p>
-            <code>SLSQP</code> is an SQP-style method with a compact dictionary
-            interface. It repeatedly solves quadratic approximations to the
-            constrained problem. For smaller smooth problems, the dictionary
-            style is often convenient.
+            Near \(x_k\), a smooth objective can be approximated by a local
+            quadratic model:
+          </p>
+          <div class="equation-block">
+            \[
+              m_k(d)
+              = f(x_k) + \nabla f(x_k)^T d
+                + \frac{1}{2}d^T H_k d.
+            \]
+          </div>
+          <p>
+            Here \(d\) is the proposed step. The model \(m_k(d)\) is not the
+            original objective; it is a cheaper local prediction of what would
+            happen if we moved from \(x_k\) to \(x_k+d\). The matrix \(H_k\)
+            represents curvature in that local model; depending on the solver
+            setup, it may come from an exact Hessian, a Hessian-vector product,
+            or a quasi-Newton approximation. The constraints are treated
+            locally too, so each iteration solves a simpler constrained
+            subproblem before deciding whether to accept the step.
+          </p>
+          <h3>trust-constr: trust the model only nearby</h3>
+          <p>
+            <code>trust-constr</code> adds one extra piece to the subproblem: a
+            trust region. The solver does not let the local model make promises
+            arbitrarily far away from \(x_k\). It asks for a step inside a ball
+            of radius \(\Delta_k\):
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \min_d\quad & m_k(d),\\
+              \text{subject to}\quad
+                &\text{local approximations of the constraints},\\
+                &\lVert d\rVert \leq \Delta_k.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            The radius \(\Delta_k\) is the solver's confidence knob. If the
+            trial step behaves like the model predicted, the radius can grow. If
+            the trial step gives poor progress or hurts feasibility too much,
+            the radius shrinks and the next step must stay closer to \(x_k\).
+          </p>
+          <p>
+            Inequalities add another teaching idea: slack. A constraint such as
+            \(c(x)\leq0\) can be rewritten with a positive slack variable
+            \(s\):
+          </p>
+          <div class="equation-block">
+            \[
+              c(x)+s=0,\qquad s>0.
+            \]
+          </div>
+          <p>
+            This lets an interior-point method work with equality-like
+            equations while using a barrier term to keep \(s\) positive. The
+            barrier starts as a strong warning against touching the boundary and
+            is relaxed as the method gets closer to the solution.
+          </p>
+          <p>
+            The SciPy interface mirrors this "state the allowed interval"
+            viewpoint. <code>Bounds</code> describes limits on the variables.
+            <code>LinearConstraint</code> describes expressions of the form
+            \(A x\). <code>NonlinearConstraint</code> describes expressions
+            \(c(x)\). In both constraint objects, the key shape is the same:
+          </p>
+          <div class="equation-block">
+            \[
+              \text{lower bound}\leq \text{constraint value}\leq
+              \text{upper bound}.
+            \]
+          </div>
+          <p>
+            Equal lower and upper bounds mean equality. An infinite lower or
+            upper bound means one side is absent. This is why
+            <code>trust-constr</code> is a good teaching interface: the code
+            looks like the mathematical problem statement.
+          </p>
+          <h3>SLSQP: solve a sequence of quadratic programs</h3>
+          <p>
+            <code>SLSQP</code> stands for Sequential Least Squares Programming.
+            The important word for intuition is sequential. The method does not
+            solve the nonlinear constrained problem in one jump. It repeatedly
+            builds a quadratic approximation of the objective, linearizes the
+            constraints, solves that easier constrained subproblem, and then
+            updates the current point.
+          </p>
+          <p>
+            Read one SLSQP iteration as:
+          </p>
+          <div class="equation-block">
+            \[
+            \begin{aligned}
+              \text{nonlinear problem}
+              &\rightarrow \text{quadratic objective model}\\
+              &\rightarrow \text{linearized constraints}\\
+              &\rightarrow \text{trial step}\\
+              &\rightarrow \text{new local model}.
+            \end{aligned}
+            \]
+          </div>
+          <p>
+            The dictionary interface uses a different sign convention from
+            <code>trust-constr</code>. An equality constraint function must
+            return zero at a feasible point:
+          </p>
+          <div class="equation-block">
+            \[
+              h(x)=0.
+            \]
+          </div>
+          <p>
+            An inequality constraint function must return a nonnegative value
+            at a feasible point:
+          </p>
+          <div class="equation-block">
+            \[
+              g(x)\geq0.
+            \]
+          </div>
+          <p>
+            That is why the mathematical constraint \(x_0+2x_1\leq1\) becomes
+            <code>1 - x[0] - 2*x[1]</code> in the SLSQP dictionary. The
+            expression is positive exactly when there is slack left.
+          </p>
+          <div class="callout">
+            Practical distinction: <code>trust-constr</code> asks you to state
+            lower and upper limits directly. <code>SLSQP</code> asks you to
+            write residual functions whose signs tell the solver whether each
+            rule is satisfied.
+          </div>
+          <h3>How to choose between them</h3>
+          <p>
+            The right choice is less about which method is newer and more about
+            what structure you can give the solver.
           </p>
           <table class="summary-table">
             <thead>
               <tr>
                 <th>Method</th>
-                <th>Constraint interface</th>
-                <th>Good fit</th>
+                <th>What it is trying to do</th>
+                <th>Use it when</th>
+                <th>Watch out for</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td><code>trust-constr</code></td>
-                <td><code>Bounds</code>, <code>LinearConstraint</code>, <code>NonlinearConstraint</code></td>
-                <td>General smooth constrained problems, especially when Hessians, Hessian-vector products, or sparsity are useful.</td>
+                <td>Choose a constrained step inside a trust region, balancing model decrease and feasibility.</td>
+                <td>You have smooth constraints, want explicit lower and upper limits, or can exploit Hessians, Hessian-vector products, or sparse Jacobians.</td>
+                <td>There are more moving parts to inspect: trust radius, constraint violation, barrier behavior, and derivative quality.</td>
               </tr>
               <tr>
                 <td><code>SLSQP</code></td>
-                <td>Dictionaries with <code>type</code>, <code>fun</code>, and optional <code>jac</code></td>
-                <td>Smaller smooth constrained problems where a mature SQP-style method is convenient.</td>
+                <td>Solve a sequence of quadratic programming approximations with equality and nonnegative-inequality residuals.</td>
+                <td>The problem is small to medium sized, smooth, and easy to express with constraint dictionaries.</td>
+                <td>The sign convention is easy to reverse by accident, and finite-difference Jacobians can be noisy if the functions are badly scaled.</td>
               </tr>
             </tbody>
           </table>
@@ -247,7 +382,9 @@
           <p>
             The same mathematical problem can be represented with modern
             constraint objects for <code>trust-constr</code>, or with dictionary
-            constraints for <code>SLSQP</code>.
+            constraints for <code>SLSQP</code>. The code below names the
+            objective gradient and the constraint Jacobians so that the pieces
+            are visible instead of hidden inside lambdas.
           </p>
           <pre><code>import numpy as np
 from scipy.optimize import Bounds, LinearConstraint, NonlinearConstraint, minimize
@@ -261,6 +398,15 @@ def rosen_der(x):
         200.0 * (x[1] - x[0]**2),
     ])
 
+def nonlinear_fun(x):
+    return np.array([x[0]**2 + x[1], x[0]**2 - x[1]])
+
+def nonlinear_jac(x):
+    return np.array([
+        [2.0 * x[0], 1.0],
+        [2.0 * x[0], -1.0],
+    ])
+
 bounds = Bounds([0.0, -0.5], [1.0, 2.0])
 
 linear = LinearConstraint(
@@ -270,9 +416,10 @@ linear = LinearConstraint(
 )
 
 nonlinear = NonlinearConstraint(
-    lambda x: np.array([x[0]**2 + x[1], x[0]**2 - x[1]]),
+    nonlinear_fun,
     [-np.inf, -np.inf],
     [1.0, 1.0],
+    jac=nonlinear_jac,
 )
 
 x0 = np.array([0.5, 0.0])
@@ -286,18 +433,36 @@ trust = minimize(
     bounds=bounds,
 )
 
-ineq_cons = {
-    "type": "ineq",
-    "fun": lambda x: np.array([
+def ineq_fun(x):
+    return np.array([
         1.0 - x[0] - 2.0 * x[1],
         1.0 - x[0]**2 - x[1],
         1.0 - x[0]**2 + x[1],
-    ]),
+    ])
+
+def ineq_jac(x):
+    return np.array([
+        [-1.0, -2.0],
+        [-2.0 * x[0], -1.0],
+        [-2.0 * x[0], 1.0],
+    ])
+
+def eq_fun(x):
+    return np.array([2.0 * x[0] + x[1] - 1.0])
+
+def eq_jac(x):
+    return np.array([[2.0, 1.0]])
+
+ineq_cons = {
+    "type": "ineq",
+    "fun": ineq_fun,
+    "jac": ineq_jac,
 }
 
 eq_cons = {
     "type": "eq",
-    "fun": lambda x: np.array([2.0 * x[0] + x[1] - 1.0]),
+    "fun": eq_fun,
+    "jac": eq_jac,
 }
 
 slsqp = minimize(
@@ -311,12 +476,111 @@ slsqp = minimize(
 
 print(trust.x, trust.fun)
 print(slsqp.x, slsqp.fun)</code></pre>
+          <h3>Read the trust-constr setup</h3>
+          <p>
+            The bounds line is the variable box:
+          </p>
+          <div class="equation-block">
+            \[
+              0\leq x_0\leq1,\qquad -0.5\leq x_1\leq2.
+            \]
+          </div>
+          <p>
+            The <code>LinearConstraint</code> has two rows. The first row says
+            \(x_0+2x_1\leq1\), because the lower limit is
+            <code>-np.inf</code> and the upper limit is <code>1.0</code>. The
+            second row says \(2x_0+x_1=1\), because the lower and upper limits
+            are both <code>1.0</code>.
+          </p>
+          <p>
+            The <code>NonlinearConstraint</code> returns two nonlinear
+            quantities. Each has no lower limit and an upper limit of
+            <code>1.0</code>, so both are one-sided inequalities:
+          </p>
+          <div class="equation-block">
+            \[
+              x_0^2+x_1\leq1,\qquad x_0^2-x_1\leq1.
+            \]
+          </div>
+          <p>
+            The Jacobian <code>nonlinear_jac</code> tells the solver how those
+            two quantities change when \(x_0\) or \(x_1\) changes. Its first row
+            belongs to \(x_0^2+x_1\); its second row belongs to
+            \(x_0^2-x_1\).
+          </p>
+          <h3>Read the SLSQP setup</h3>
           <p>
             The sign convention differs by interface. In
             <code>LinearConstraint</code> and <code>NonlinearConstraint</code>,
             you give lower and upper bounds directly. In an
             <code>SLSQP</code> inequality dictionary, the function should be
             nonnegative when the constraint is satisfied.
+          </p>
+          <p>
+            The conversion is mechanical once you know the sign convention:
+          </p>
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>Mathematical rule</th>
+                <th><code>trust-constr</code> expression</th>
+                <th><code>SLSQP</code> residual</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>\(x_0+2x_1\leq1\)</td>
+                <td>upper limit <code>1.0</code> on row <code>[1, 2]</code></td>
+                <td><code>1 - x[0] - 2*x[1]</code></td>
+              </tr>
+              <tr>
+                <td>\(2x_0+x_1=1\)</td>
+                <td>lower and upper limits both <code>1.0</code></td>
+                <td><code>2*x[0] + x[1] - 1</code></td>
+              </tr>
+              <tr>
+                <td>\(x_0^2+x_1\leq1\)</td>
+                <td>upper limit <code>1.0</code> on nonlinear component</td>
+                <td><code>1 - x[0]**2 - x[1]</code></td>
+              </tr>
+              <tr>
+                <td>\(x_0^2-x_1\leq1\)</td>
+                <td>upper limit <code>1.0</code> on nonlinear component</td>
+                <td><code>1 - x[0]**2 + x[1]</code></td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            This table also shows a common source of bugs. The same inequality
+            appears with opposite-looking algebra because
+            <code>trust-constr</code> stores the original left-hand side, while
+            <code>SLSQP</code> stores the remaining slack.
+          </p>
+          <h3>Audit the result</h3>
+          <p>
+            After either call, do not stop at <code>result.fun</code>. A
+            constrained result has two jobs: the objective should be low, and
+            the constraints should be satisfied. A small audit can recompute the
+            residuals in the same sign convention used by the problem:
+          </p>
+          <pre><code>def feasibility_report(x):
+    return {
+        "linear_ineq_slack": 1.0 - x[0] - 2.0 * x[1],
+        "nonlinear_ineq_slack": np.array([
+            1.0 - x[0]**2 - x[1],
+            1.0 - x[0]**2 + x[1],
+        ]),
+        "equality_residual": 2.0 * x[0] + x[1] - 1.0,
+        "inside_bounds": np.all(np.logical_and(bounds.lb <= x, x <= bounds.ub)),
+    }
+
+print(feasibility_report(trust.x))
+print(feasibility_report(slsqp.x))</code></pre>
+          <p>
+            Positive inequality slack means room remains. A near-zero equality
+            residual means the equality line has been reached. If the objective
+            is attractive but one of these checks fails, the point is not a
+            valid constrained solution yet.
           </p>
         </section>
 
